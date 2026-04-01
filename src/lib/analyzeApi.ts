@@ -37,7 +37,12 @@ export async function requestAnalyze(
   };
 
   if (!res.ok) {
-    throw new Error(data.error || data.detail || `요청 실패 (${res.status})`);
+    const parts = [data.error, data.detail].filter(
+      (s): s is string => typeof s === "string" && s.length > 0,
+    );
+    const msg =
+      parts.join(" — ") || `요청 실패 (${res.status})`;
+    throw new Error(msg);
   }
 
   return data as AnalyzeResponse;

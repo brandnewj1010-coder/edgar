@@ -139,23 +139,39 @@ export default function App() {
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
           {error && (
             <div className="mx-auto mb-6 max-w-3xl rounded-2xl border border-rose-200/90 bg-rose-50/90 px-5 py-4 text-sm text-rose-800 shadow-sm">
-              {error}
+              <p className="whitespace-pre-wrap font-medium">{error}</p>
               {!demoMode && (
-                <p className="mt-3 text-xs leading-relaxed text-rose-700/95">
-                  로컬에서 API를 쓰려면{" "}
-                  <code className="rounded-md bg-white/90 px-1.5 py-0.5 font-mono text-[11px]">
-                    npx vercel dev
-                  </code>{" "}
-                  로 실행하거나, Vercel에 배포한 뒤 같은 도메인에서{" "}
-                  <code className="rounded-md bg-white/90 px-1.5 py-0.5 font-mono text-[11px]">
-                    /api/analyze
-                  </code>
-                  를 사용하세요.{" "}
-                  <code className="rounded-md bg-white/90 px-1.5 py-0.5 font-mono text-[11px]">
-                    GEMINI_API_KEY
-                  </code>{" "}
-                  환경 변수가 필요합니다.
-                </p>
+                <div className="mt-3 space-y-2 text-xs leading-relaxed text-rose-700/95">
+                  {typeof window !== "undefined" &&
+                  (window.location.hostname === "localhost" ||
+                    window.location.hostname === "127.0.0.1") ? (
+                    <p>
+                      <strong className="text-rose-900">지금 주소가 localhost예요.</strong>{" "}
+                      Vercel에 넣은 키는 <strong>배포된 사이트</strong>에만 적용됩니다.
+                      로컬에서 쓰려면 프로젝트 폴더의{" "}
+                      <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
+                        .env.local
+                      </code>{" "}
+                      에 <code className="font-mono text-[11px]">GEMINI_API_KEY</code>를
+                      넣고{" "}
+                      <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
+                        npm run dev:vercel
+                      </code>{" "}
+                      로 실행하세요. (또는 왼쪽 데모 모드)
+                    </p>
+                  ) : (
+                    <p>
+                      <strong className="text-rose-900">배포 사이트에서만 안 될 때:</strong>{" "}
+                      Vercel → 해당 프로젝트 → Settings → Environment Variables 에
+                      <code className="mx-0.5 rounded bg-white/90 px-1 font-mono text-[11px]">
+                        GEMINI_API_KEY
+                      </code>
+                      가 있는지 확인한 뒤, 꼭{" "}
+                      <strong>Deployments → 최신 배포 → Redeploy</strong> 해 주세요.
+                      변수를 나중에 넣으면 예전 빌드에는 키가 없을 수 있어요.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}
