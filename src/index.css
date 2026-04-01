@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  @apply bg-ink-50 text-ink-900 antialiased;
+}
+
+/* Markdown report */
+.report-md {
+  @apply text-[15px] leading-relaxed text-ink-900;
+}
+
+.report-md h1 {
+  @apply mt-0 mb-4 text-2xl font-bold tracking-tight text-indigo-950;
+}
+
+.report-md h2 {
+  @apply mt-8 mb-3 text-lg font-semibold text-indigo-900;
+}
+
+.report-md h3 {
+  @apply mt-6 mb-2 text-base font-semibold text-slate-800;
+}
+
+.report-md p {
+  @apply my-3 text-slate-700;
+}
+
+.report-md ul,
+.report-md ol {
+  @apply my-3 pl-5 text-slate-700;
+}
+
+.report-md li {
+  @apply my-1.5;
+}
+
+.report-md table {
+  @apply my-4 w-full border-collapse text-sm;
+}
+
+.report-md th,
+.report-md td {
+  @apply border border-slate-200 px-3 py-2 text-left;
+}
+
+.report-md th {
+  @apply bg-indigo-50 font-semibold text-indigo-950;
+}
+
+.report-md blockquote {
+  @apply my-4 border-l-4 border-indigo-200 pl-4 text-slate-600;
+}
+
+.report-md code {
+  @apply rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[13px] text-indigo-900;
+}
+
+.report-md pre {
+  @apply my-4 overflow-x-auto rounded-lg bg-slate-900 p-4 text-slate-100;
+}
+
+.report-md pre code {
+  @apply bg-transparent p-0 text-slate-100;
+}
+
+.term-popover {
+  @apply cursor-help border-b border-dotted border-indigo-400 font-medium text-indigo-700;
+}
