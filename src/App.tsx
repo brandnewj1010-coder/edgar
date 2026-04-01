@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { FileText, Loader2, Sparkles } from "lucide-react";
 import { MarkdownReport } from "./components/MarkdownReport";
 import { LearningSide } from "./components/LearningSide";
 import { Sidebar } from "./components/Sidebar";
@@ -63,34 +63,44 @@ export default function App() {
         supabaseConnected={isSupabaseConfigured()}
       />
 
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col border-slate-200 bg-white md:border-r">
-        <header className="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3">
-          <div className="flex items-center gap-2 text-sm text-slate-600">
-            <Sparkles className="h-4 w-4 text-amber-500" />
-            <span>
-              Gemini 2.5 Flash · Google Search Grounding ·{" "}
-              {result?.model ? (
-                <span className="font-mono text-xs text-slate-500">
-                  {result.model}
-                </span>
-              ) : (
-                "분석 대기 중"
-              )}
-            </span>
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col border-slate-200 bg-gradient-to-b from-slate-50/80 to-white md:border-r">
+        <header className="flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 py-3.5 backdrop-blur-sm md:px-6">
+          <div className="flex min-w-0 items-center gap-2.5 text-sm text-slate-600">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-sm">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-medium text-slate-500">
+                AI 공시 분석 리포트
+              </p>
+              <p className="truncate text-sm text-slate-800">
+                Gemini 2.5 Flash · Search Grounding
+                {result?.model ? (
+                  <span className="ml-1.5 font-mono text-xs font-normal text-slate-400">
+                    · {result.model}
+                  </span>
+                ) : null}
+              </p>
+            </div>
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
           {error && (
-            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <div className="mx-auto mb-6 max-w-3xl rounded-2xl border border-rose-200/90 bg-rose-50/90 px-5 py-4 text-sm text-rose-800 shadow-sm">
               {error}
               {!demoMode && (
-                <p className="mt-2 text-xs text-rose-700">
+                <p className="mt-3 text-xs leading-relaxed text-rose-700/95">
                   로컬에서 API를 쓰려면{" "}
-                  <code className="rounded bg-white/80 px-1">npx vercel dev</code>
+                  <code className="rounded-md bg-white/90 px-1.5 py-0.5 font-mono text-[11px]">
+                    npx vercel dev
+                  </code>{" "}
                   로 실행하거나, Vercel에 배포한 뒤 같은 도메인에서{" "}
-                  <code className="rounded bg-white/80 px-1">/api/analyze</code>를
-                  사용하세요. <code className="rounded bg-white/80 px-1">
+                  <code className="rounded-md bg-white/90 px-1.5 py-0.5 font-mono text-[11px]">
+                    /api/analyze
+                  </code>
+                  를 사용하세요.{" "}
+                  <code className="rounded-md bg-white/90 px-1.5 py-0.5 font-mono text-[11px]">
                     GEMINI_API_KEY
                   </code>{" "}
                   환경 변수가 필요합니다.
@@ -100,24 +110,63 @@ export default function App() {
           )}
 
           {!result && !loading && !error && (
-            <div className="flex flex-col items-center justify-center py-20 text-center text-slate-500">
-              <p className="max-w-md text-sm leading-relaxed">
-                왼쪽에서 <strong className="text-slate-700">DART</strong> 또는{" "}
-                <strong className="text-slate-700">EDGAR</strong>를 선택하고
-                검색어를 입력한 뒤 분석을 시작하세요. 용어에 마우스를 올리면
-                사전형 툴팁이 표시됩니다.
+            <div className="mx-auto flex max-w-lg flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200/90 bg-white/60 px-8 py-16 text-center shadow-sm">
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                <FileText className="h-7 w-7 opacity-90" />
+              </div>
+              <p className="text-base font-medium text-slate-800">
+                분석 리포트가 여기에 표시됩니다
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                왼쪽에서 <span className="font-medium text-slate-700">DART</span>{" "}
+                또는 <span className="font-medium text-slate-700">EDGAR</span>를
+                고르고 검색어를 입력한 뒤 분석을 시작하세요. 본문 속 용어에 마우스를
+                올리면 설명이 뜹니다.
               </p>
             </div>
           )}
 
           {loading && (
-            <div className="flex justify-center py-16 text-sm text-slate-500">
-              분석 중입니다… (검색·요약에 30초~2분 걸릴 수 있습니다)
+            <div className="mx-auto flex max-w-md flex-col items-center justify-center gap-5 py-20">
+              <Loader2
+                className="h-11 w-11 animate-spin text-indigo-500"
+                strokeWidth={2}
+              />
+              <div className="text-center">
+                <p className="text-sm font-medium text-slate-800">
+                  리포트를 작성하는 중이에요
+                </p>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+                  검색과 요약에 보통 30초~2분 정도 걸릴 수 있어요.
+                </p>
+              </div>
             </div>
           )}
 
           {result && !loading && (
-            <MarkdownReport markdown={result.reportMarkdown} />
+            <div className="mx-auto max-w-3xl">
+              <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                <div className="min-w-0 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
+                      {result.source === "dart" ? "DART" : "EDGAR"}
+                    </span>
+                    {result.model === "demo" ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                        데모
+                      </span>
+                    ) : null}
+                  </div>
+                  <h2 className="truncate text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">
+                    {result.query}
+                  </h2>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_4px_12px_rgba(15,23,42,0.04)] md:p-9 lg:p-10">
+                <MarkdownReport markdown={result.reportMarkdown} />
+              </div>
+            </div>
           )}
         </div>
       </main>

@@ -12,65 +12,91 @@ body {
   @apply bg-ink-50 text-ink-900 antialiased;
 }
 
-/* Markdown report */
+/* Markdown report — 읽기용 타이포 */
 .report-md {
-  @apply text-[15px] leading-relaxed text-ink-900;
+  @apply text-[15px] leading-[1.75] text-slate-700;
+  font-feature-settings: "kern" 1, "liga" 1;
 }
 
 .report-md h1 {
-  @apply mt-0 mb-4 text-2xl font-bold tracking-tight text-indigo-950;
+  @apply mt-0 border-b border-slate-200/90 pb-4 text-[1.65rem] font-bold tracking-tight text-slate-900;
+  letter-spacing: -0.02em;
 }
 
 .report-md h2 {
-  @apply mt-8 mb-3 text-lg font-semibold text-indigo-900;
+  @apply mt-10 border-l-[3px] border-indigo-500 pl-3 text-[1.05rem] font-semibold tracking-tight text-slate-900;
+}
+
+.report-md h1 + h2 {
+  @apply mt-8;
 }
 
 .report-md h3 {
-  @apply mt-6 mb-2 text-base font-semibold text-slate-800;
+  @apply mt-8 text-[0.95rem] font-semibold text-slate-800;
 }
 
 .report-md p {
-  @apply my-3 text-slate-700;
+  @apply my-4 text-slate-600 first:mt-0;
 }
 
 .report-md ul,
 .report-md ol {
-  @apply my-3 pl-5 text-slate-700;
+  @apply my-4 space-y-2 pl-5 text-slate-600;
 }
 
 .report-md li {
-  @apply my-1.5;
+  @apply leading-relaxed;
+}
+
+.report-md li::marker {
+  @apply text-indigo-400;
 }
 
 .report-md table {
-  @apply my-4 w-full border-collapse text-sm;
+  @apply my-6 w-full overflow-hidden rounded-xl border border-slate-200/90 text-[13px] shadow-sm;
+}
+
+.report-md thead {
+  @apply bg-slate-50/90;
 }
 
 .report-md th,
 .report-md td {
-  @apply border border-slate-200 px-3 py-2 text-left;
+  @apply border-b border-slate-100 px-4 py-2.5 text-left align-top;
 }
 
 .report-md th {
-  @apply bg-indigo-50 font-semibold text-indigo-950;
+  @apply font-semibold text-slate-800;
+}
+
+.report-md tbody tr:last-child td {
+  @apply border-b-0;
+}
+
+.report-md tbody tr:hover td {
+  @apply bg-slate-50/50;
+}
+
+.report-md hr {
+  @apply my-8 border-0 border-t border-slate-200;
 }
 
 .report-md blockquote {
-  @apply my-4 border-l-4 border-indigo-200 pl-4 text-slate-600;
+  @apply my-5 rounded-r-lg border-l-[3px] border-indigo-300/80 bg-indigo-50/40 py-2 pl-4 pr-3 text-[0.95em] text-slate-600;
 }
 
 .report-md code {
-  @apply rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[13px] text-indigo-900;
+  @apply rounded-md bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.88em] font-normal text-indigo-900;
 }
 
 .report-md pre {
-  @apply my-4 overflow-x-auto rounded-lg bg-slate-900 p-4 text-slate-100;
+  @apply my-5 overflow-x-auto rounded-xl border border-slate-800/20 bg-slate-900 p-4 text-[13px] leading-relaxed text-slate-100 shadow-inner;
 }
 
 .report-md pre code {
-  @apply bg-transparent p-0 text-slate-100;
+  @apply border-0 bg-transparent p-0 text-slate-100;
 }
 
 .term-popover {
-  @apply cursor-help border-b border-dotted border-indigo-400 font-medium text-indigo-700;
+  @apply cursor-help border-b border-dotted border-indigo-400/90 font-medium text-indigo-700 transition hover:border-indigo-500 hover:text-indigo-800;
 }

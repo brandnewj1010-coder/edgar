@@ -18,7 +18,7 @@ const wrap =
 
 export function MarkdownReport({ markdown }: { markdown: string }) {
   return (
-    <div className="report-md">
+    <article className="report-md selection:bg-indigo-100 selection:text-indigo-950">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -33,6 +33,6 @@ export function MarkdownReport({ markdown }: { markdown: string }) {
       >
         {markdown}
       </ReactMarkdown>
-    </div>
+    </article>
   );
 }
