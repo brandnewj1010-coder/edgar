@@ -9,94 +9,199 @@
 body {
   margin: 0;
   min-height: 100vh;
-  @apply bg-ink-50 text-ink-900 antialiased;
+  @apply bg-[#eceff5] text-ink-900 antialiased;
 }
 
-/* Markdown report — 읽기용 타이포 */
-.report-md {
-  @apply text-[15px] leading-[1.75] text-slate-700;
+/* ========== 편집 디자인 리포트 본문 ========== */
+.report-md.report-editorial {
+  @apply max-w-none text-[15px] leading-[1.82] text-slate-600;
   font-feature-settings: "kern" 1, "liga" 1;
+  text-rendering: optimizeLegibility;
 }
 
-.report-md h1 {
-  @apply mt-0 border-b border-slate-200/90 pb-4 text-[1.65rem] font-bold tracking-tight text-slate-900;
-  letter-spacing: -0.02em;
+.report-editorial {
+  counter-reset: report-section;
 }
 
-.report-md h2 {
-  @apply mt-10 border-l-[3px] border-indigo-500 pl-3 text-[1.05rem] font-semibold tracking-tight text-slate-900;
+/* 표지급 제목 */
+.report-h1 {
+  font-family: "Noto Serif KR", Georgia, "Times New Roman", serif;
+  @apply mb-3 mt-0 pb-7 text-[1.65rem] font-bold leading-[1.28] tracking-[-0.035em] text-slate-900 md:text-[1.95rem];
+  border-bottom: 1px solid rgba(15, 23, 42, 0.07);
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.9);
 }
 
-.report-md h1 + h2 {
-  @apply mt-8;
+/* 섹션 — 번호 뱃지 + 세리프 */
+.report-h2 {
+  counter-increment: report-section;
+  font-family: "Noto Serif KR", Georgia, serif;
+  display: grid;
+  grid-template-columns: 2.625rem minmax(0, 1fr);
+  @apply gap-x-4 gap-y-1 text-[1.08rem] font-semibold leading-snug tracking-[-0.02em] text-slate-900 md:text-[1.2rem];
+  margin: 3.25rem 0 1.25rem;
+  padding-top: 0.15rem;
 }
 
-.report-md h3 {
-  @apply mt-8 text-[0.95rem] font-semibold text-slate-800;
+.report-h2::before {
+  content: counter(report-section);
+  font-family:
+    Pretendard Variable,
+    Pretendard,
+    system-ui,
+    sans-serif;
+  @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 text-[12px] font-bold tabular-nums text-white shadow-md shadow-indigo-500/20;
+  line-height: 1;
+  margin-top: 0.1rem;
 }
 
-.report-md p {
-  @apply my-4 text-slate-600 first:mt-0;
+.report-h3 {
+  font-family: "Noto Serif KR", Georgia, serif;
+  @apply mb-3 mt-10 text-[1.02rem] font-semibold tracking-[-0.015em] text-slate-800;
+  padding-left: 0.65rem;
+  border-left: 2px solid rgba(99, 102, 241, 0.45);
 }
 
-.report-md ul,
-.report-md ol {
-  @apply my-4 space-y-2 pl-5 text-slate-600;
+/* 첫 문단 리드 */
+.report-editorial .report-h1 + p {
+  @apply text-[1.05rem] font-normal leading-[1.75] text-slate-600 md:text-[1.08rem];
+  letter-spacing: -0.01em;
 }
 
-.report-md li {
-  @apply leading-relaxed;
+.report-editorial p {
+  @apply my-[1.15em] text-slate-600;
 }
 
-.report-md li::marker {
-  @apply text-indigo-400;
+.report-editorial .report-h1 + p {
+  margin-top: 1.75rem;
 }
 
-.report-md table {
-  @apply my-6 w-full overflow-hidden rounded-xl border border-slate-200/90 text-[13px] shadow-sm;
+/* 리스트 */
+.report-ul,
+.report-ol {
+  @apply my-6 space-y-2.5 pl-1 text-slate-600;
 }
 
-.report-md thead {
-  @apply bg-slate-50/90;
+.report-ul {
+  list-style: none;
 }
 
-.report-md th,
-.report-md td {
-  @apply border-b border-slate-100 px-4 py-2.5 text-left align-top;
+.report-ul .report-li {
+  position: relative;
+  padding-left: 1.35rem;
 }
 
-.report-md th {
-  @apply font-semibold text-slate-800;
+.report-ul .report-li::before {
+  content: "";
+  @apply absolute left-0 top-[0.55em] h-1.5 w-1.5 rounded-full bg-indigo-400;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
 }
 
-.report-md tbody tr:last-child td {
+.report-ol {
+  @apply list-decimal pl-6 marker:font-semibold marker:text-indigo-500;
+}
+
+.report-ol .report-li {
+  @apply pl-1;
+}
+
+.report-ol .report-li::marker {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 인용 — 에디토리얼 콜아웃 */
+.report-quote {
+  @apply relative my-8 overflow-hidden rounded-2xl border border-indigo-100/90 bg-gradient-to-br from-indigo-50/90 via-white to-violet-50/40 px-7 py-6 text-[0.96em] leading-relaxed text-slate-600 shadow-sm;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.report-quote::before {
+  content: "\201C";
+  font-family: "Noto Serif KR", Georgia, serif;
+  @apply absolute left-4 top-2 text-5xl font-bold leading-none text-indigo-200/90;
+  opacity: 0.85;
+}
+
+.report-quote p {
+  @apply relative z-[1] my-3 first:mt-0 last:mb-0;
+}
+
+/* 구분선 */
+.report-hr-wrap {
+  @apply my-12 flex items-center justify-center gap-4;
+}
+
+.report-hr-line {
+  @apply h-px flex-1 max-w-[8rem] bg-gradient-to-r from-transparent to-stone-300/80;
+}
+
+.report-hr-wrap .report-hr-line:last-child {
+  @apply bg-gradient-to-l from-transparent to-stone-300/80;
+}
+
+.report-hr-dot {
+  @apply h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400;
+  box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.2);
+}
+
+/* 표 — 리포트용 */
+.report-table-outer {
+  @apply my-9 overflow-x-auto rounded-2xl border border-stone-200/90 bg-white shadow-sm;
+  -webkit-overflow-scrolling: touch;
+}
+
+.report-table {
+  @apply w-full border-collapse text-left text-[13px];
+}
+
+.report-table thead {
+  @apply bg-gradient-to-b from-slate-50 to-slate-50/50;
+}
+
+.report-table th {
+  @apply border-b border-stone-200/90 px-5 py-3.5 font-semibold tracking-wide text-slate-800;
+  font-size: 0.8125rem;
+}
+
+.report-table td {
+  @apply border-b border-stone-100 px-5 py-3 align-top text-slate-600;
+}
+
+.report-table tbody tr {
+  @apply transition-colors;
+}
+
+.report-table tbody tr:hover td {
+  @apply bg-indigo-50/30;
+}
+
+.report-table tbody tr:last-child td {
   @apply border-b-0;
 }
 
-.report-md tbody tr:hover td {
-  @apply bg-slate-50/50;
+/* 코드 */
+.report-editorial code {
+  @apply rounded-md border border-slate-200/80 bg-slate-100/80 px-1.5 py-0.5 font-mono text-[0.84em] font-normal text-indigo-900;
 }
 
-.report-md hr {
-  @apply my-8 border-0 border-t border-slate-200;
+.report-editorial pre {
+  @apply my-8 overflow-x-auto rounded-2xl border border-slate-800/10 bg-slate-900 p-5 text-[13px] leading-relaxed text-slate-100 shadow-inner;
 }
 
-.report-md blockquote {
-  @apply my-5 rounded-r-lg border-l-[3px] border-indigo-300/80 bg-indigo-50/40 py-2 pl-4 pr-3 text-[0.95em] text-slate-600;
-}
-
-.report-md code {
-  @apply rounded-md bg-slate-100/90 px-1.5 py-0.5 font-mono text-[0.88em] font-normal text-indigo-900;
-}
-
-.report-md pre {
-  @apply my-5 overflow-x-auto rounded-xl border border-slate-800/20 bg-slate-900 p-4 text-[13px] leading-relaxed text-slate-100 shadow-inner;
-}
-
-.report-md pre code {
+.report-editorial pre code {
   @apply border-0 bg-transparent p-0 text-slate-100;
 }
 
+/* 본문 링크 */
+.report-editorial a {
+  @apply font-medium text-indigo-600 underline decoration-indigo-200 underline-offset-2 transition hover:text-indigo-800 hover:decoration-indigo-400;
+}
+
 .term-popover {
-  @apply cursor-help border-b border-dotted border-indigo-400/90 font-medium text-indigo-700 transition hover:border-indigo-500 hover:text-indigo-800;
+  @apply cursor-help border-b border-dotted border-indigo-400/90 font-semibold text-indigo-800 transition hover:border-indigo-500 hover:text-indigo-950;
+}
+
+/* 리포트 카드 바깥 */
+.report-sheet {
+  @apply relative;
 }

@@ -20,6 +20,8 @@ export default {
           "Segoe UI",
           "sans-serif",
         ],
+        /** 리포트 제목·섹션 — 편집 디자인용 세리프 */
+        report: ['"Noto Serif KR"', "Georgia", "serif"],
       },
     },
   },

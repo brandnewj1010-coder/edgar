@@ -4,15 +4,21 @@ import { MarkdownReport } from "./components/MarkdownReport";
 import { LearningSide } from "./components/LearningSide";
 import { Sidebar } from "./components/Sidebar";
 import { requestAnalyze } from "./lib/analyzeApi";
-import type { RecentItem } from "./lib/recentHistory";
-import { loadRecent, pushRecent } from "./lib/recentHistory";
+import {
+  loadRecentList,
+  loadReportById,
+  saveReport,
+  type RecentItem,
+} from "./lib/analysisStorage";
 import { isSupabaseConfigured } from "./lib/supabase";
 import type { AnalyzeResponse, DisclosureSource } from "./types";
+import { ReportDocument } from "./components/ReportDocument";
 
 export default function App() {
   const [source, setSource] = useState<DisclosureSource>("dart");
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [recent, setRecent] = useState<RecentItem[]>([]);
@@ -21,7 +27,7 @@ export default function App() {
   );
 
   useEffect(() => {
-    void loadRecent().then(setRecent);
+    void loadRecentList().then(setRecent);
   }, []);
 
   const run = useCallback(async () => {
@@ -32,8 +38,8 @@ export default function App() {
     try {
       const data = await requestAnalyze(source, q, { demo: demoMode });
       setResult(data);
-      await pushRecent({ source, query: q });
-      setRecent(await loadRecent());
+      await saveReport(data);
+      setRecent(await loadRecentList());
     } catch (e) {
       setResult(null);
       setError(e instanceof Error ? e.message : "알 수 없는 오류");
@@ -42,13 +48,26 @@ export default function App() {
     }
   }, [query, source, demoMode]);
 
-  const pickRecent = useCallback((r: { source: DisclosureSource; query: string }) => {
+  const pickRecent = useCallback(async (r: RecentItem) => {
     setSource(r.source);
     setQuery(r.query);
+    setError(null);
+    setRestoring(true);
+    try {
+      const full = await loadReportById(r.id);
+      if (full) {
+        setResult(full);
+      } else {
+        setResult(null);
+        setError("저장된 리포트를 불러오지 못했습니다.");
+      }
+    } finally {
+      setRestoring(false);
+    }
   }, []);
 
   return (
-    <div className="flex min-h-screen min-h-[480px] flex-col bg-ink-50 md:flex-row">
+    <div className="flex min-h-screen min-h-[480px] flex-col bg-[#eceff5] md:flex-row">
       <Sidebar
         source={source}
         onSource={setSource}
@@ -144,7 +163,14 @@ export default function App() {
           )}
 
           {result && !loading && (
-            <div className="mx-auto max-w-3xl">
+            <div
+              className={`mx-auto max-w-3xl transition-opacity duration-200 ${restoring ? "pointer-events-none opacity-60" : "opacity-100"}`}
+            >
+              {restoring ? (
+                <p className="mb-3 text-center text-xs font-medium text-indigo-600">
+                  저장된 리포트를 불러오는 중…
+                </p>
+              ) : null}
               <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
                 <div className="min-w-0 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
@@ -163,9 +189,9 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200/90 bg-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_4px_12px_rgba(15,23,42,0.04)] md:p-9 lg:p-10">
+              <ReportDocument>
                 <MarkdownReport markdown={result.reportMarkdown} />
-              </div>
+              </ReportDocument>
             </div>
           )}
         </div>
