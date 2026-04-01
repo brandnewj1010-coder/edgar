@@ -205,3 +205,23 @@ body {
 .report-sheet {
   @apply relative;
 }
+
+/* 인쇄: 본문만 */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  main {
+    border: none !important;
+    max-width: 100% !important;
+  }
+
+  @page {
+    margin: 1.2cm;
+  }
+}

@@ -2,14 +2,17 @@ import type { AnalyzeResponse, DisclosureSource } from "../types";
 
 const md = (q: string) => `# ${q} — 데모 분석 리포트
 
-이 화면은 **API 키 없이** UI·툴팁·퀴즈 흐름을 확인하기 위한 샘플입니다. 실제 분석은 Vercel에 배포한 뒤 \`GEMINI_API_KEY\`를 설정하고 데모 모드를 끄세요.
+이 화면은 **API 키 없이** UI·툴팁·퀴즈·샌키·생각 과제 흐름을 확인하기 위한 샘플입니다. 실제 분석은 Vercel에 배포한 뒤 \`GEMINI_API_KEY\`를 설정하고 데모 모드를 끄세요.
 
 ## 핵심 재무·사업 포인트
 
-| 항목 | 메모 |
-|------|------|
-| **영업이익** | 본업 손익을 가장 먼저 봅니다. |
-| **EBITDA** | 감가상각 전까지의 수익력을 보조 지표로 씁니다. |
+(데모) 해외 공시식 표기 예: **$1.2 billion** 매출, **USD 450 million** 영업비용.
+
+| 연도 | 매출 | 영업이익 |
+|------|------|----------|
+| 2023년 | 100 | 12 |
+| 2024년 | 110 | 14 |
+| 2025년(추정) | 118 | 15 |
 
 ## 현금흐름
 
@@ -28,10 +31,16 @@ const md = (q: string) => `# ${q} — 데모 분석 리포트
 export function demoAnalyzeResponse(
   source: DisclosureSource,
   query: string,
+  opts?: { compareWith?: string; fiscalYears?: number[] },
 ): AnalyzeResponse {
   const label = source === "dart" ? "DART" : "EDGAR";
+  const base = query || "샘플";
+  const vs = opts?.compareWith?.trim();
+  const title =
+    vs && vs !== base ? `${base} vs ${vs}` : `${label} · ${base}`;
+
   return {
-    reportMarkdown: md(`${label} · ${query || "샘플"}`),
+    reportMarkdown: md(title),
     quiz: [
       {
         question: "영업이익이 의미하는 바로 가장 가까운 것은?",
@@ -63,11 +72,63 @@ export function demoAnalyzeResponse(
         ],
         correctIndex: 0,
       },
+      {
+        question: "연도별 비교 표에서 추세를 볼 때 가장 먼저 확인하기 좋은 것은?",
+        choices: [
+          "매출·이익의 방향(증가/감소)과 변동 폭",
+          "표의 글자 크기",
+          "첫 행만",
+          "부채 항목만",
+        ],
+        correctIndex: 0,
+      },
     ],
+    reflectionPrompts: [
+      {
+        title: "이익과 현금의 괴리",
+        prompt:
+          "영업이익은 늘었는데 영업현금흐름이 줄었다면, 어떤 계정이나 사업 요인을 의심해볼 수 있을까요? (실제 데이터 없이 가정으로 논의)",
+      },
+      {
+        title: "비교 관점",
+        prompt:
+          vs
+            ? `두 기업 중 어느 쪽이 재무 건전성·성장성 측면에서 더 보수적으로 보이는지, 본인만의 기준을 하나 정해 근거를 말해보세요.`
+            : "동종 업종에서 '좋은 재무'를 판단할 때 가장 중요하게 볼 지표 하나를 고르고 이유를 쓰세요.",
+      },
+      {
+        title: "리스크 시나리오",
+        prompt:
+          "금리·환율·원자재 중 하나를 골라, 해당 리스크가 손익·현금흐름에 미치는 경로를 한 단락으로 설명해보세요.",
+      },
+    ],
+    sankey: {
+      title: "데모: 매출에서 이익·비용으로 (교육용)",
+      unit: "억 원",
+      nodes: [
+        { id: "seg_a", label: "사업부문 A", category: "revenue" },
+        { id: "seg_b", label: "사업부문 B", category: "revenue" },
+        { id: "total", label: "총매출", category: "neutral" },
+        { id: "opex", label: "영업비용", category: "expense" },
+        { id: "op", label: "영업이익", category: "profit" },
+        { id: "tax", label: "법인세 등", category: "expense" },
+        { id: "net", label: "당기순이익", category: "profit" },
+      ],
+      links: [
+        { source: "seg_a", target: "total", value: 100 },
+        { source: "seg_b", target: "total", value: 80 },
+        { source: "total", target: "opex", value: 120 },
+        { source: "total", target: "op", value: 60 },
+        { source: "op", target: "tax", value: 15 },
+        { source: "op", target: "net", value: 45 },
+      ],
+    },
     groundingQueries: ["demo"],
     sources: [],
     model: "demo",
     source,
-    query: query || "DEMO",
+    query: title,
+    compareWith: vs || undefined,
+    fiscalYears: opts?.fiscalYears?.length ? opts.fiscalYears : undefined,
   };
 }

@@ -1,7 +1,8 @@
 import { BookMarked, Link2 } from "lucide-react";
 import { FINANCIAL_TERMS } from "../data/financialTerms";
-import type { FinancialTermEntry, QuizItem } from "../types";
+import type { FinancialTermEntry, QuizItem, ReflectionItem } from "../types";
 import { QuizPanel } from "./QuizPanel";
+import { ReflectionPanel } from "./ReflectionPanel";
 
 function termsInReport(markdown: string): FinancialTermEntry[] {
   const lower = markdown.toLowerCase();
@@ -21,11 +22,13 @@ function termsInReport(markdown: string): FinancialTermEntry[] {
 export function LearningSide({
   reportMarkdown,
   quiz,
+  reflectionPrompts,
   sources,
   groundingQueries,
 }: {
   reportMarkdown: string;
   quiz: QuizItem[];
+  reflectionPrompts: ReflectionItem[];
   sources: { title: string; uri: string }[];
   groundingQueries: string[];
 }) {
@@ -93,6 +96,10 @@ export function LearningSide({
           )}
         </section>
       )}
+
+      <section className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm">
+        <ReflectionPanel items={reflectionPrompts} />
+      </section>
 
       <section className="mt-auto rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm">
         <QuizPanel quiz={quiz} />

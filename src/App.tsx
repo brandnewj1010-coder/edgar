@@ -13,10 +13,15 @@ import {
 import { isSupabaseConfigured } from "./lib/supabase";
 import type { AnalyzeResponse, DisclosureSource } from "./types";
 import { ReportDocument } from "./components/ReportDocument";
+import { ReportActions } from "./components/ReportActions";
+import { SankeyViz } from "./components/SankeyViz";
+import { KrwAssistView } from "./components/KrwAssistView";
 
 export default function App() {
   const [source, setSource] = useState<DisclosureSource>("dart");
   const [query, setQuery] = useState("");
+  const [compareWith, setCompareWith] = useState("");
+  const [fiscalYears, setFiscalYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +41,11 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const data = await requestAnalyze(source, q, { demo: demoMode });
+      const data = await requestAnalyze(source, q, {
+        demo: demoMode,
+        compareWith: compareWith.trim() || undefined,
+        fiscalYears: fiscalYears.length ? fiscalYears : undefined,
+      });
       setResult(data);
       await saveReport(data);
       setRecent(await loadRecentList());
@@ -46,7 +55,18 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [query, source, demoMode]);
+  }, [query, source, demoMode, compareWith, fiscalYears]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        void run();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [run]);
 
   const pickRecent = useCallback(async (r: RecentItem) => {
     setSource(r.source);
@@ -57,6 +77,8 @@ export default function App() {
       const full = await loadReportById(r.id);
       if (full) {
         setResult(full);
+        setCompareWith(full.compareWith ?? "");
+        setFiscalYears(full.fiscalYears ?? []);
       } else {
         setResult(null);
         setError("저장된 리포트를 불러오지 못했습니다.");
@@ -73,6 +95,16 @@ export default function App() {
         onSource={setSource}
         query={query}
         onQuery={setQuery}
+        compareWith={compareWith}
+        onCompareWith={setCompareWith}
+        fiscalYears={fiscalYears}
+        onToggleFiscalYear={(y) => {
+          setFiscalYears((prev) =>
+            prev.includes(y)
+              ? prev.filter((x) => x !== y)
+              : [...prev, y].sort((a, b) => a - b),
+          );
+        }}
         onSubmit={run}
         loading={loading}
         recent={recent}
@@ -83,7 +115,7 @@ export default function App() {
       />
 
       <main className="flex min-h-0 min-w-0 flex-1 flex-col border-slate-200 bg-gradient-to-b from-slate-50/80 to-white md:border-r">
-        <header className="flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 py-3.5 backdrop-blur-sm md:px-6">
+        <header className="no-print flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 py-3.5 backdrop-blur-sm md:px-6">
           <div className="flex min-w-0 items-center gap-2.5 text-sm text-slate-600">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-sm">
               <Sparkles className="h-4 w-4" />
@@ -93,7 +125,7 @@ export default function App() {
                 AI 공시 분석 리포트
               </p>
               <p className="truncate text-sm text-slate-800">
-                Gemini 2.5 Flash · Search Grounding
+                Gemini Flash · Search Grounding
                 {result?.model ? (
                   <span className="ml-1.5 font-mono text-xs font-normal text-slate-400">
                     · {result.model}
@@ -156,7 +188,12 @@ export default function App() {
                   리포트를 작성하는 중이에요
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
-                  검색과 요약에 보통 30초~2분 정도 걸릴 수 있어요.
+                  검색·리포트·퀴즈·차트까지 한 번에 처리합니다. 네트워크에 따라
+                  다르지만,{" "}
+                  <span className="font-medium text-slate-600">
+                    목표는 약 30초 이내
+                  </span>
+                  입니다. (API·검색 지연 시 더 걸릴 수 있어요)
                 </p>
               </div>
             </div>
@@ -182,12 +219,45 @@ export default function App() {
                         데모
                       </span>
                     ) : null}
+                    {result.compareWith ? (
+                      <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-900">
+                        기업 비교
+                      </span>
+                    ) : null}
+                    {result.fiscalYears?.length ? (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-900">
+                        연도 {result.fiscalYears.join("·")}
+                      </span>
+                    ) : null}
                   </div>
                   <h2 className="truncate text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">
                     {result.query}
                   </h2>
                 </div>
               </div>
+
+              <ReportActions reportMarkdown={result.reportMarkdown} />
+
+              <KrwAssistView reportMarkdown={result.reportMarkdown} />
+
+              {result.sankey ? (
+                <section className="mb-8 rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-sm md:p-5">
+                  <h3 className="mb-1 text-sm font-semibold text-slate-900">
+                    {result.sankey.title ?? "재무 흐름 (샌키)"}
+                  </h3>
+                  {result.sankey.unit ? (
+                    <p className="mb-3 text-[11px] text-slate-500">
+                      단위: {result.sankey.unit}
+                    </p>
+                  ) : (
+                    <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+                      리포트·검색으로 추정한 구조입니다. 공시 원문과 다를 수
+                      있습니다.
+                    </p>
+                  )}
+                  <SankeyViz data={result.sankey} />
+                </section>
+              ) : null}
 
               <ReportDocument>
                 <MarkdownReport markdown={result.reportMarkdown} />
@@ -197,20 +267,22 @@ export default function App() {
         </div>
       </main>
 
-      <aside className="hidden w-[min(100%,22rem)] shrink-0 overflow-hidden bg-ink-50 lg:block">
+      <aside className="no-print hidden w-[min(100%,22rem)] shrink-0 overflow-hidden bg-ink-50 lg:block">
         <LearningSide
           reportMarkdown={result?.reportMarkdown ?? ""}
           quiz={result?.quiz ?? []}
+          reflectionPrompts={result?.reflectionPrompts ?? []}
           sources={result?.sources ?? []}
           groundingQueries={result?.groundingQueries ?? []}
         />
       </aside>
 
       {/* 모바일: 학습 패널을 하단 스택 */}
-      <div className="border-t border-slate-200 bg-ink-50 lg:hidden">
+      <div className="no-print border-t border-slate-200 bg-ink-50 lg:hidden">
         <LearningSide
           reportMarkdown={result?.reportMarkdown ?? ""}
           quiz={result?.quiz ?? []}
+          reflectionPrompts={result?.reflectionPrompts ?? []}
           sources={result?.sources ?? []}
           groundingQueries={result?.groundingQueries ?? []}
         />

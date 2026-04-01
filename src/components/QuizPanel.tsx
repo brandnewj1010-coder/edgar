@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { CheckCircle2, CircleHelp, XCircle } from "lucide-react";
+import { CheckCircle2, CircleHelp, Trophy, XCircle } from "lucide-react";
 import type { QuizItem } from "../types";
+import { getQuizStats, recordQuizRound } from "../lib/quizStats";
 
 export function QuizPanel({ quiz }: { quiz: QuizItem[] }) {
   const [picked, setPicked] = useState<Record<number, number | undefined>>({});
   const [revealed, setRevealed] = useState(false);
+  const [stats, setStats] = useState(() => getQuizStats());
 
   if (!quiz.length) {
     return (
@@ -16,26 +18,43 @@ export function QuizPanel({ quiz }: { quiz: QuizItem[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-[13px] font-semibold text-slate-900">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
             <CircleHelp className="h-3.5 w-3.5" />
           </span>
           분석 퀴즈
         </h3>
-        <button
-          type="button"
-          onClick={() => {
-            setRevealed((r) => {
-              const next = !r;
-              if (!next) setPicked({});
-              return next;
-            });
-          }}
-          className="rounded-full border border-indigo-200/80 bg-white px-3 py-1 text-[11px] font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-50"
-        >
-          {revealed ? "다시 풀기" : "정답 공개"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {stats.totalQuestions > 0 ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-900 ring-1 ring-amber-100">
+              <Trophy className="h-3 w-3" />
+              누적 {stats.totalCorrect}/{stats.totalQuestions} · {stats.rounds}회
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              setRevealed((r) => {
+                const next = !r;
+                if (next) {
+                  let correct = 0;
+                  quiz.forEach((item, qi) => {
+                    if (picked[qi] === item.correctIndex) correct += 1;
+                  });
+                  recordQuizRound(correct, quiz.length);
+                  setStats(getQuizStats());
+                } else {
+                  setPicked({});
+                }
+                return next;
+              });
+            }}
+            className="rounded-full border border-indigo-200/80 bg-white px-3 py-1 text-[11px] font-medium text-indigo-700 shadow-sm transition hover:bg-indigo-50"
+          >
+            {revealed ? "다시 풀기" : "정답 공개"}
+          </button>
+        </div>
       </div>
       <ol className="space-y-3">
         {quiz.map((item, qi) => (

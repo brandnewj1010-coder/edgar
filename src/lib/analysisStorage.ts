@@ -1,6 +1,36 @@
 import type { AnalyzeResponse } from "../types";
 import { getSupabase, isSupabaseConfigured } from "./supabase";
 
+function normalizeAnalyzeResponse(
+  d: Partial<AnalyzeResponse> | null | undefined,
+): AnalyzeResponse {
+  const sankey = d?.sankey;
+  const okSankey =
+    sankey &&
+    typeof sankey === "object" &&
+    Array.isArray(sankey.nodes) &&
+    sankey.nodes.length >= 2
+      ? sankey
+      : null;
+  return {
+    reportMarkdown: d?.reportMarkdown ?? "",
+    quiz: Array.isArray(d?.quiz) ? d.quiz : [],
+    reflectionPrompts: Array.isArray(d?.reflectionPrompts)
+      ? d.reflectionPrompts
+      : [],
+    sankey: okSankey,
+    groundingQueries: Array.isArray(d?.groundingQueries)
+      ? d.groundingQueries
+      : [],
+    sources: Array.isArray(d?.sources) ? d.sources : [],
+    model: d?.model ?? "",
+    source: d?.source === "edgar" ? "edgar" : "dart",
+    query: d?.query ?? "",
+    compareWith: d?.compareWith,
+    fiscalYears: Array.isArray(d?.fiscalYears) ? d.fiscalYears : undefined,
+  };
+}
+
 const LOCAL_STORE_KEY = "insight-analyzer:stored-reports-v1";
 
 type StoredEntry = {
@@ -47,24 +77,31 @@ function rowToResponse(row: DbReportRow): AnalyzeResponse {
     model?: string;
     groundingQueries?: string[];
     sources?: { title: string; uri: string }[];
+    reflectionPrompts?: AnalyzeResponse["reflectionPrompts"];
+    sankey?: AnalyzeResponse["sankey"];
+    compareWith?: string;
+    fiscalYears?: number[];
   };
-  return {
+  return normalizeAnalyzeResponse({
     source: row.source as AnalyzeResponse["source"],
     query: String(row.query),
     reportMarkdown: String(row.report_markdown),
     quiz: Array.isArray(row.quiz) ? (row.quiz as AnalyzeResponse["quiz"]) : [],
-    groundingQueries: Array.isArray(meta.groundingQueries)
-      ? meta.groundingQueries
-      : [],
-    sources: Array.isArray(meta.sources) ? meta.sources : [],
+    reflectionPrompts: meta.reflectionPrompts,
+    sankey: meta.sankey as AnalyzeResponse["sankey"],
+    groundingQueries: meta.groundingQueries,
+    sources: meta.sources,
     model: typeof meta.model === "string" ? meta.model : "",
-  };
+    compareWith: meta.compareWith,
+    fiscalYears: meta.fiscalYears,
+  });
 }
 
 function saveLocalReport(trimmed: AnalyzeResponse) {
   const id = crypto.randomUUID();
+  const data = normalizeAnalyzeResponse(trimmed);
   const entries = [
-    { id, at: Date.now(), data: trimmed },
+    { id, at: Date.now(), data },
     ...loadLocalEntries().filter((e) => e.id !== id),
   ];
   saveLocalEntries(entries);
@@ -72,7 +109,10 @@ function saveLocalReport(trimmed: AnalyzeResponse) {
 
 /** 분석 성공 후 전체 리포트 저장 */
 export async function saveReport(data: AnalyzeResponse): Promise<void> {
-  const trimmed = { ...data, query: data.query.trim() };
+  const trimmed = normalizeAnalyzeResponse({
+    ...data,
+    query: data.query.trim(),
+  });
 
   if (isSupabaseConfigured()) {
     const sb = getSupabase();
@@ -86,6 +126,10 @@ export async function saveReport(data: AnalyzeResponse): Promise<void> {
           model: trimmed.model,
           groundingQueries: trimmed.groundingQueries,
           sources: trimmed.sources,
+          reflectionPrompts: trimmed.reflectionPrompts,
+          sankey: trimmed.sankey,
+          compareWith: trimmed.compareWith,
+          fiscalYears: trimmed.fiscalYears,
         },
       });
       if (error) {
@@ -153,5 +197,5 @@ export async function loadReportById(id: string): Promise<AnalyzeResponse | null
   }
 
   const found = loadLocalEntries().find((e) => e.id === id);
-  return found ? found.data : null;
+  return found ? normalizeAnalyzeResponse(found.data) : null;
 }

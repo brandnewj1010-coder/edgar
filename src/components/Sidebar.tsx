@@ -1,12 +1,17 @@
 import { BarChart3, Globe2, History, Loader2, Search } from "lucide-react";
 import type { DisclosureSource } from "../types";
 import type { RecentItem } from "../lib/analysisStorage";
+import { TermOfTheDay } from "./TermOfTheDay";
 
 export function Sidebar({
   source,
   onSource,
   query,
   onQuery,
+  compareWith,
+  onCompareWith,
+  fiscalYears,
+  onToggleFiscalYear,
   onSubmit,
   loading,
   recent,
@@ -19,6 +24,10 @@ export function Sidebar({
   onSource: (s: DisclosureSource) => void;
   query: string;
   onQuery: (q: string) => void;
+  compareWith: string;
+  onCompareWith: (v: string) => void;
+  fiscalYears: number[];
+  onToggleFiscalYear: (year: number) => void;
   onSubmit: () => void;
   loading: boolean;
   recent: RecentItem[];
@@ -29,7 +38,7 @@ export function Sidebar({
   supabaseConnected: boolean;
 }) {
   return (
-    <aside className="flex h-full w-[min(100vw,20rem)] shrink-0 flex-col border-r border-slate-200/90 bg-white shadow-[4px_0_24px_-8px_rgba(15,23,42,0.08)] sm:w-80">
+    <aside className="no-print flex h-full w-[min(100vw,20rem)] shrink-0 flex-col border-r border-slate-200/90 bg-white shadow-[4px_0_24px_-8px_rgba(15,23,42,0.08)] sm:w-80">
       <div className="border-b border-slate-100/90 bg-gradient-to-br from-white to-slate-50/80 p-5">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-700 text-white shadow-md shadow-indigo-500/25">
@@ -107,6 +116,57 @@ export function Sidebar({
           </div>
         </div>
 
+        <div>
+          <label
+            htmlFor="compare"
+            className="mb-1.5 block text-xs font-medium text-slate-600"
+          >
+            비교 기업 (선택)
+          </label>
+          <input
+            id="compare"
+            value={compareWith}
+            onChange={(e) => onCompareWith(e.target.value)}
+            placeholder={
+              source === "dart"
+                ? "예: SK하이닉스, 000660"
+                : "예: GOOGL"
+            }
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15"
+          />
+          <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+            입력 시 한 리포트에서 A vs B로 나란히 요약합니다.
+          </p>
+        </div>
+
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-slate-600">
+            연도 비교 (복수 선택)
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {[2023, 2024, 2025].map((y) => {
+              const on = fiscalYears.includes(y);
+              return (
+                <button
+                  key={y}
+                  type="button"
+                  onClick={() => onToggleFiscalYear(y)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                    on
+                      ? "border-indigo-500 bg-indigo-50 text-indigo-900"
+                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+                  }`}
+                >
+                  {y}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1 text-[10px] text-slate-400">
+            선택한 연도를 표·불릿으로 한눈에 비교하도록 요청합니다.
+          </p>
+        </div>
+
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
           <input
             type="checkbox"
@@ -116,6 +176,8 @@ export function Sidebar({
           />
           데모 모드 (API 없이 UI만)
         </label>
+
+        <TermOfTheDay />
 
         <div className="mt-1 flex-1 overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/40 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">

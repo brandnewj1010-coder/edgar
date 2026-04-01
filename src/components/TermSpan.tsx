@@ -11,6 +11,14 @@ function escapeReg(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** 라틴 문자 위주 라벨은 단어 경계(\b)로 잘못된 부분 일치 방지 */
+function useWordBoundaries(label: string): boolean {
+  const t = label.trim();
+  if (t.length < 2) return false;
+  if (/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(t)) return false;
+  return /^[A-Za-z][A-Za-z0-9\s\-/&.,()+%]*[A-Za-z0-9)]?$/.test(t);
+}
+
 /** 긴 구문을 먼저 매칭하도록 패턴 구성 */
 export function buildTermPattern(terms: FinancialTermEntry[]) {
   const pieces: { label: string; entry: FinancialTermEntry }[] = [];
@@ -19,7 +27,12 @@ export function buildTermPattern(terms: FinancialTermEntry[]) {
     e.aliases?.forEach((a) => pieces.push({ label: a, entry: e }));
   }
   pieces.sort((a, b) => b.label.length - a.label.length);
-  const alternation = pieces.map((p) => escapeReg(p.label)).join("|");
+  const alternation = pieces
+    .map((p) => {
+      const esc = escapeReg(p.label);
+      return useWordBoundaries(p.label) ? `\\b${esc}\\b` : esc;
+    })
+    .join("|");
   if (!alternation) return null;
   return { re: new RegExp(`(${alternation})`, "gi"), pieces };
 }
