@@ -181,30 +181,34 @@ function normalizeSankey(raw: unknown): SankeyNormalized | null {
   };
 }
 
-function parseQuizFromModelText(text: string): {
-  question: string;
-  choices: string[];
-  correctIndex: number;
-}[] {
-  const cleaned = text
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-  const parsed = JSON.parse(cleaned) as { quiz?: unknown };
-  return normalizeQuizItems(parsed.quiz);
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-const EXTRAS_SCHEMA_HINT = `{
-  "quiz": [{"question":"","choices":["","","",""],"correctIndex":0}],
-  "reflection": [{"title":"","prompt":""}],
-  "sankey": {
-    "title": "",
-    "unit": "억 원",
-    "nodes": [{"id":"","label":"","category":"revenue|profit|expense|neutral"}],
-    "links": [{"source":"","target":"","value":0}]
+async function generateWithRetry(
+  ai: GoogleGenAI,
+  params: Parameters<typeof ai.models.generateContent>[0],
+  maxRetries = 2,
+): Promise<Awaited<ReturnType<typeof ai.models.generateContent>>> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await ai.models.generateContent(params);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isRateLimit =
+        msg.includes("429") ||
+        msg.toLowerCase().includes("rate limit") ||
+        msg.toLowerCase().includes("quota");
+      if (isRateLimit && attempt < maxRetries) {
+        await sleep((attempt + 1) * 6000);
+        continue;
+      }
+      throw e;
+    }
   }
-}`;
+  throw new Error("Max retries exceeded");
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -266,7 +270,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fiscalYears: fiscalYears ?? [],
     });
 
-    const analysis = await ai.models.generateContent({
+    const analysis = await generateWithRetry(ai, {
       model,
       contents: userPrompt,
       config: {
@@ -306,19 +310,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       .filter(Boolean) as { title: string; uri: string }[];
 
-    /** 퀴즈·생각 과제·샌키를 한 번에 생성해 왕복 1회로 단축 */
-    const slice = reportMarkdown.slice(0, 10000);
-    const extrasPrompt = `아래는 공시 분석 리포트(마크다운)입니다. 이 내용만을 근거로 JSON 한 덩어리를 출력하세요.
+    const slice = reportMarkdown.slice(0, 8000);
+
+    /** Call 2: 퀴즈 + 성찰과제 */
+    await sleep(1000);
+    const quizReflectionPrompt = `아래는 공시 분석 리포트(마크다운)입니다. 이 내용만을 근거로 JSON을 출력하세요.
 
 규칙:
 - quiz: 객관식 **정확히 4문항**. 한국어, 각 4지선다, correctIndex는 0~3 정수.
 - reflection: 서술형 **생각해볼 과제 3개**. 각각 title(짧게), prompt(구체적 질문·토론 과제). 객관식과 중복되지 않게.
-- sankey: 리포트에 나온 **숫자·비중**이 있으면 활용해 매출(또는 총수입)→비용/이익 쪽으로 흐르는 샌키 다이어그램용 데이터를 만드세요. 숫자가 불명확하면 교육용으로 **대표적인 구조만** 대략적인 수치로 채우되, unit에 단위를 명시하세요.
-- nodes[].category: revenue(매출·수익원)=파란 계열, profit(이익)=초록, expense(비용)=빨강, neutral(합계·중간)=회색 구분용.
-- links의 source/target은 반드시 nodes[].id와 일치.
 
-스키마 예시:
-${EXTRAS_SCHEMA_HINT}
+스키마:
+{"quiz":[{"question":"","choices":["","","",""],"correctIndex":0}],"reflection":[{"title":"","prompt":""}]}
 
 리포트:
 ---
@@ -327,44 +330,66 @@ ${slice}
 
 반드시 **JSON만** 출력(설명 문장 없음).`;
 
-    const extrasRes = await ai.models.generateContent({
-      model,
-      contents: extrasPrompt,
-      config: {
-        responseMimeType: "application/json",
-        maxOutputTokens: 8192,
-      },
-    });
-
-    const extrasText = extrasRes.text?.trim() ?? "";
     let quiz = normalizeQuizItems([]);
     let reflectionPrompts: { title: string; prompt: string }[] = [];
+
+    try {
+      const quizRes = await generateWithRetry(ai, {
+        model,
+        contents: quizReflectionPrompt,
+        config: {
+          responseMimeType: "application/json",
+          maxOutputTokens: 4096,
+        },
+      });
+      const quizText = quizRes.text?.trim() ?? "";
+      const qrParsed = JSON.parse(
+        quizText.replace(/^```json\s*/i, "").replace(/\s*```$/i, ""),
+      ) as { quiz?: unknown; reflection?: unknown };
+      quiz = normalizeQuizItems(qrParsed.quiz);
+      reflectionPrompts = normalizeReflection(qrParsed.reflection);
+    } catch {
+      quiz = [];
+      reflectionPrompts = [];
+    }
+
+    /** Call 3: 샌키 다이어그램 */
+    await sleep(1000);
+    const sankeyPrompt = `아래는 공시 분석 리포트(마크다운)입니다. 리포트에 나온 **숫자·비중**을 활용해 매출(또는 총수입)→비용/이익으로 흐르는 샌키 다이어그램 데이터를 JSON으로 출력하세요.
+
+규칙:
+- nodes[].category: revenue(매출·수익원), profit(이익), expense(비용), neutral(합계·중간)
+- links의 source/target은 반드시 nodes[].id와 일치.
+- 숫자가 불명확하면 교육용 대표 구조로 대략적인 수치를 채우고 unit에 단위를 명시.
+
+스키마:
+{"title":"","unit":"억 원","nodes":[{"id":"","label":"","category":"revenue"}],"links":[{"source":"","target":"","value":0}]}
+
+리포트:
+---
+${slice}
+---
+
+반드시 **JSON만** 출력(설명 문장 없음).`;
+
     let sankey: ReturnType<typeof normalizeSankey> = null;
 
     try {
-      const parsed = JSON.parse(extrasText) as {
-        quiz?: unknown;
-        reflection?: unknown;
-        sankey?: unknown;
-      };
-      quiz = normalizeQuizItems(parsed.quiz);
-      reflectionPrompts = normalizeReflection(parsed.reflection);
-      sankey = normalizeSankey(parsed.sankey);
+      const sankeyRes = await generateWithRetry(ai, {
+        model,
+        contents: sankeyPrompt,
+        config: {
+          responseMimeType: "application/json",
+          maxOutputTokens: 2048,
+        },
+      });
+      const sankeyText = sankeyRes.text?.trim() ?? "";
+      const sankeyParsed = JSON.parse(
+        sankeyText.replace(/^```json\s*/i, "").replace(/\s*```$/i, ""),
+      ) as unknown;
+      sankey = normalizeSankey(sankeyParsed);
     } catch {
-      try {
-        const parsed2 = JSON.parse(
-          extrasText.replace(/^```json\s*/i, "").replace(/\s*```$/i, ""),
-        ) as { quiz?: unknown; reflection?: unknown; sankey?: unknown };
-        quiz = normalizeQuizItems(parsed2.quiz);
-        reflectionPrompts = normalizeReflection(parsed2.reflection);
-        sankey = normalizeSankey(parsed2.sankey);
-      } catch {
-        try {
-          quiz = parseQuizFromModelText(extrasText);
-        } catch {
-          quiz = [];
-        }
-      }
+      sankey = null;
     }
 
     const displayQuery =

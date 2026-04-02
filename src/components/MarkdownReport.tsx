@@ -74,7 +74,6 @@ export function MarkdownReport({ markdown }: { markdown: string }) {
           h2: H2,
           h3: H3,
           p: wrap("p"),
-          li: wrap("li"),
           td: wrap("td"),
           th: wrap("th"),
           blockquote: Blockquote,
