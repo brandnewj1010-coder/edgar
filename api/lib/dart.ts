@@ -41,6 +41,54 @@ function extractTag(block: string, tag: string): string {
 
 const CORP_FETCH_MS = 45_000;
 
+/**
+ * corpCode.xml 전체는 수십 MB로 Vercel OOM을 유발할 수 있음.
+ * 자주 쓰는 종목은 고유번호를 고정해 두고 XML 다운로드를 건너뜀 (오픈다트 공시 기준).
+ * 출처: opendart 고유번호 체계와 동일한 8자리.
+ */
+const DART_CORP_BY_STOCK: Record<string, DartCorp> = {
+  "005930": {
+    corp_code: "00126380",
+    corp_name: "삼성전자",
+    stock_code: "005930",
+  },
+  "000660": {
+    corp_code: "00164779",
+    corp_name: "SK하이닉스",
+    stock_code: "000660",
+  },
+};
+
+/** 정확히 일치할 때만 XML 생략 (기업명 → 종목코드) */
+const DART_CORP_NAME_ALIAS: Record<string, string> = {
+  삼성전자: "005930",
+  SK하이닉스: "000660",
+};
+
+/**
+ * 기업 해석: 먼저 소량 정적 매핑 → 실패 시에만 corpCode.xml.
+ * 005930/삼성전자 등은 대용량 XML 없이 동작해 FUNCTION_INVOCATION_FAILED 를 줄입니다.
+ */
+export async function resolveDartCorp(
+  query: string,
+  crtfc_key: string,
+): Promise<DartCorp | null> {
+  const q = query.trim();
+  if (!q) return null;
+  if (/^\d{1,6}$/.test(q)) {
+    const code = q.padStart(6, "0");
+    const direct = DART_CORP_BY_STOCK[code];
+    if (direct) return direct;
+  }
+  const alias = DART_CORP_NAME_ALIAS[q];
+  if (alias) {
+    const fromAlias = DART_CORP_BY_STOCK[alias];
+    if (fromAlias) return fromAlias;
+  }
+  const xml = await loadCorpXml(crtfc_key);
+  return findCorpInXml(q, xml);
+}
+
 /** 고유번호 CORPCODE.xml 내용(한 번만 내려받아 재사용) */
 export async function loadCorpXml(crtfc_key: string): Promise<string> {
   if (corpXmlCache && corpXmlCacheKey === crtfc_key) return corpXmlCache;
