@@ -5,7 +5,7 @@ import {
   bundleToPromptSnippet,
   fetchDartFinancialBundle,
   resolveDartCorp,
-} from "./lib/dart";
+} from "./dart.js";
 
 /** Vercel 플랜에 따라 상한이 다릅니다 */
 export const config = { maxDuration: 60 };
