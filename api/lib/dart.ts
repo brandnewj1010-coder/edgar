@@ -215,8 +215,10 @@ function filterFnlttForStudy(rows: FnlttRow[]): FnlttRow[] {
   const only = rows.filter((r) =>
     SJ_FOR_STUDY.has(String(r.sj_div || "").trim()),
   );
-  if (only.length === 0) return [];
-  const scored = only.map((r, i) => ({ r, i, s: accountStudyScore(r) }));
+  /** 주요계정 API는 간혹 sj_div 표기가 비어 있을 수 있음 → 전체를 대상으로 점수만 매김 */
+  const base = only.length > 0 ? only : rows;
+  if (base.length === 0) return [];
+  const scored = base.map((r, i) => ({ r, i, s: accountStudyScore(r) }));
   scored.sort((a, b) => {
     if (b.s !== a.s) return b.s - a.s;
     return a.i - b.i;
@@ -228,6 +230,11 @@ function filterFnlttForStudy(rows: FnlttRow[]): FnlttRow[] {
   return picked;
 }
 
+/**
+ * `fnlttSinglAcntAll` 은 삼성급 기업에서 JSON이 수십 MB → `res.json()` 만으로 Vercel OOM·FUNCTION_INVOCATION_FAILED.
+ * **단일회사 주요계정** API만 사용 (재무상태·손익·현금흐름 핵심 계정, 건수 작음).
+ * @see https://opendart.fss.or.kr/ → 재무정보 → 단일회사 주요계정
+ */
 export async function fetchFnlttSinglAcntAll(
   crtfc_key: string,
   corp_code: string,
@@ -235,7 +242,7 @@ export async function fetchFnlttSinglAcntAll(
   reprt_code: string,
   fs_div: "CFS" | "OFS",
 ): Promise<FnlttRow[]> {
-  const r = await dartGet("fnlttSinglAcntAll.json", crtfc_key, {
+  const r = await dartGet("fnlttSinglAcnt.json", crtfc_key, {
     corp_code,
     bsns_year,
     reprt_code,
@@ -243,7 +250,7 @@ export async function fetchFnlttSinglAcntAll(
   });
   if (r.status === "013") return [];
   if (r.status !== "000") {
-    throw new Error(`fnlttSinglAcntAll ${fs_div}: ${r.message} (${r.status})`);
+    throw new Error(`fnlttSinglAcnt(주요계정) ${fs_div}: ${r.message} (${r.status})`);
   }
   const list = r.list;
   if (!Array.isArray(list)) return [];
@@ -423,7 +430,7 @@ export function bundleToMarkdown(b: DartBundle): string {
     "",
     `- **기업**: ${b.corp.corp_name} (종목코드 ${b.corp.stock_code}, 고유번호 ${b.corp.corp_code})`,
     `- **기준**: ${b.bsns_year}년 ${b.reprt_label} (연결=CFS / 별도=OFS)`,
-    `- **출처**: 금융감독원 전자공시 오픈다트 API (fnlttSinglAcntAll, 임원·직원 현황)`,
+    `- **출처**: 금융감독원 오픈다트 **단일회사 주요계정**(fnlttSinglAcnt), 임원·직원 현황`,
     `- **선별**: 재무상태표·손익·현금흐름(BS/IS/CIS/CF) 계정만 사용하고, 핵심 지표·인건비·보수 관련 계정을 우선합니다. 자본변동표 등은 생략합니다.`,
     "",
     `> 교육용 요약입니다. 전체 계정·원문은 DART에서 확인하세요.`,

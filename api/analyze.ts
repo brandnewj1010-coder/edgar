@@ -214,7 +214,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           content: buildPrimaryPrompt(source, query, dartPromptSnippet),
         },
       ],
-      max_tokens: 8192,
+      max_tokens: 4096,
     });
 
     let reportMarkdown = extractMessageText(completion);
@@ -230,16 +230,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         messages: [
           { role: "user", content: buildFallbackPrompt(source, query) },
         ],
-        max_tokens: 8192,
+        max_tokens: 4096,
       });
       reportMarkdown = extractMessageText(completion);
     }
 
     if (!reportMarkdown.trim()) {
-      res.status(502).json({
-        error: "모델 응답이 비어 있습니다. 잠시 후 다시 시도해 주세요.",
-      });
-      return;
+      if (dartTablesMarkdown.length > 200) {
+        reportMarkdown =
+          "*AI 해설 문단은 비어 있었습니다. 위의 오픈다트 표를 먼저 확인해 주세요.*";
+      } else {
+        res.status(502).json({
+          error: "모델 응답이 비어 있습니다. 잠시 후 다시 시도해 주세요.",
+        });
+        return;
+      }
     }
 
     if (usedFallback && !hasDartTables) {
@@ -274,6 +279,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.error("[analyze]", message);
+    if (dartTablesMarkdown.length > 200) {
+      res.status(200).json({
+        reportMarkdown: `${dartTablesMarkdown}\n\n---\n\n## AI 해설\n\n*OpenAI 단계에서 오류가 났습니다. **위 표는 오픈다트 주요계정 원문**입니다. 잠시 후 다시 시도하거나 토큰·한도를 확인하세요.*\n\n\`${message.replace(/`/g, "'")}\``,
+        quiz: [],
+        reflectionPrompts: [],
+        sankey: null,
+        groundingQueries: [],
+        sources: [
+          {
+            title: "오픈다트 (금융감독원 전자공시)",
+            uri: "https://opendart.fss.or.kr/",
+          },
+          { title: "DART 공시시스템", uri: "https://dart.fss.or.kr/" },
+        ],
+        model: `${model} (OpenAI 오류, 표만 성공)`,
+        source,
+        query,
+      });
+      return;
+    }
     res.status(500).json({
       error: "분석 중 오류가 발생했습니다.",
       detail: message,
