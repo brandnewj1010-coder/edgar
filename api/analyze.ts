@@ -4,8 +4,8 @@ import {
   bundleToMarkdown,
   bundleToPromptSnippet,
   fetchDartFinancialBundle,
-  findCorp,
-  loadCorpList,
+  findCorpInXml,
+  loadCorpXml,
 } from "./lib/dart";
 
 /** Vercel 플랜에 따라 상한이 다릅니다 */
@@ -181,8 +181,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (source === "dart" && dartKey) {
     try {
-      const corps = await loadCorpList(dartKey);
-      const corp = findCorp(query, corps);
+      const corpXml = await loadCorpXml(dartKey);
+      const corp = findCorpInXml(query, corpXml);
       if (!corp) {
         res.status(400).json({
           error:

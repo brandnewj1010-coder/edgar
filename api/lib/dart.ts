@@ -29,8 +29,9 @@ export type FnlttRow = {
   ord?: string;
 };
 
-let corpListCache: DartCorp[] | null = null;
-let corpListCacheKey = "";
+/** 전체 상장사를 객체 배열로 만들면 Vercel 메모리 한도(OOM)로 FUNCTION_INVOCATION_FAILED 가 납니다. XML 문자열만 캐시합니다. */
+let corpXmlCache: string | null = null;
+let corpXmlCacheKey = "";
 
 function extractTag(block: string, tag: string): string {
   const re = new RegExp(`<${tag}>([^<]*)</${tag}>`, "i");
@@ -38,26 +39,11 @@ function extractTag(block: string, tag: string): string {
   return m ? m[1].trim() : "";
 }
 
-function parseCorpXml(xml: string): DartCorp[] {
-  const rows: DartCorp[] = [];
-  const re = /<list[^>]*>([\s\S]*?)<\/list>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(xml)) !== null) {
-    const block = m[1];
-    const corp_code = extractTag(block, "corp_code");
-    const corp_name = extractTag(block, "corp_name");
-    const stock_code = extractTag(block, "stock_code").trim();
-    if (!corp_code || !corp_name) continue;
-    if (!/^\d{6}$/.test(stock_code)) continue;
-    rows.push({ corp_code, corp_name, stock_code });
-  }
-  return rows;
-}
-
 const CORP_FETCH_MS = 45_000;
 
-export async function loadCorpList(crtfc_key: string): Promise<DartCorp[]> {
-  if (corpListCache && corpListCacheKey === crtfc_key) return corpListCache;
+/** 고유번호 CORPCODE.xml 내용(한 번만 내려받아 재사용) */
+export async function loadCorpXml(crtfc_key: string): Promise<string> {
+  if (corpXmlCache && corpXmlCacheKey === crtfc_key) return corpXmlCache;
   const url = `${BASE}/corpCode.xml?crtfc_key=${encodeURIComponent(crtfc_key)}`;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), CORP_FETCH_MS);
@@ -89,33 +75,54 @@ export async function loadCorpList(crtfc_key: string): Promise<DartCorp[]> {
     xml = t.decode(buf);
     if (!xml.includes("<list>")) throw new Error("고유번호 XML 파싱 실패");
   }
-  const corps = parseCorpXml(xml);
-  corpListCache = corps;
-  corpListCacheKey = crtfc_key;
-  return corps;
+  corpXmlCache = xml;
+  corpXmlCacheKey = crtfc_key;
+  return xml;
 }
 
-export function findCorp(query: string, corps: DartCorp[]): DartCorp | null {
+/** 배열을 만들지 않고 `<list>` 블록만 순회해 기업 1건을 찾습니다. */
+export function findCorpInXml(query: string, xml: string): DartCorp | null {
   const q = query.trim();
   if (!q) return null;
+  const listRe = /<list[^>]*>([\s\S]*?)<\/list>/gi;
+
   if (/^\d{1,6}$/.test(q)) {
     const code = q.padStart(6, "0");
-    const hit = corps.find((c) => c.stock_code === code);
-    if (hit) return hit;
+    let m: RegExpExecArray | null;
+    while ((m = listRe.exec(xml)) !== null) {
+      const block = m[1];
+      const stock_code = extractTag(block, "stock_code").trim();
+      if (stock_code !== code) continue;
+      const corp_code = extractTag(block, "corp_code");
+      const corp_name = extractTag(block, "corp_name");
+      if (corp_code && corp_name && /^\d{6}$/.test(stock_code)) {
+        return { corp_code, corp_name, stock_code };
+      }
+    }
+    return null;
   }
+
   const compact = q.replace(/\s+/g, "");
-  const nameHits = corps.filter(
-    (c) =>
-      c.corp_name === q ||
-      c.corp_name.includes(q) ||
-      c.corp_name.replace(/\s+/g, "") === compact,
-  );
-  if (nameHits.length === 1) return nameHits[0];
-  if (nameHits.length > 1) {
-    const exact = nameHits.find((c) => c.corp_name === q);
-    return exact ?? nameHits[0];
+  const candidates: DartCorp[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = listRe.exec(xml)) !== null) {
+    const block = m[1];
+    const corp_code = extractTag(block, "corp_code");
+    const corp_name = extractTag(block, "corp_name");
+    const stock_code = extractTag(block, "stock_code").trim();
+    if (!corp_code || !corp_name || !/^\d{6}$/.test(stock_code)) continue;
+    if (
+      corp_name === q ||
+      corp_name.includes(q) ||
+      corp_name.replace(/\s+/g, "") === compact
+    ) {
+      candidates.push({ corp_code, corp_name, stock_code });
+    }
   }
-  return null;
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+  const exact = candidates.find((c) => c.corp_name === q);
+  return exact ?? candidates[0];
 }
 
 async function dartGet(
