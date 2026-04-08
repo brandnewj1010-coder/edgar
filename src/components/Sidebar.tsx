@@ -76,6 +76,19 @@ export function Sidebar({
               EDGAR
             </button>
           </div>
+          {source === "dart" ? (
+            <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
+              한국 상장사는 오픈다트 API로{" "}
+              <span className="font-medium text-slate-600">
+                연결·별도 재무제표, 임원·직원 공시
+              </span>
+              를 붙입니다. 서버 환경 변수{" "}
+              <code className="rounded bg-slate-100 px-1 font-mono text-[10px]">
+                DART_API_KEY
+              </code>{" "}
+              가 있을 때 동작해요 (opendart.fss.or.kr 무료 발급).
+            </p>
+          ) : null}
         </div>
 
         <div>

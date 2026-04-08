@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 /**
- * 배포 진단용: 브라우저에서 GET /api/health 로 열어보면
- * 서버리스에 OPENAI_API_KEY가 주입되는지 여부만 확인합니다 (키 값은 절대 노출 안 함).
+ * 배포 진단용: GET /api/health
+ * 키 값은 절대 노출하지 않습니다.
  */
 export default function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -15,14 +15,22 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const key = process.env.OPENAI_API_KEY;
-  const openaiKeyConfigured = Boolean(key && String(key).trim().length > 0);
+  const openai = process.env.OPENAI_API_KEY;
+  const openaiKeyConfigured = Boolean(openai && String(openai).trim().length > 0);
+  const dart = process.env.DART_API_KEY;
+  const dartKeyConfigured = Boolean(dart && String(dart).trim().length > 0);
 
   res.status(200).json({
     ok: true,
     openaiKeyConfigured,
-    hint: openaiKeyConfigured
-      ? "OPENAI_API_KEY is present on this deployment."
-      : "OPENAI_API_KEY is missing for serverless. Add it in Vercel → this project → Settings → Environment Variables → Production, then Redeploy.",
+    dartKeyConfigured,
+    hint: [
+      openaiKeyConfigured
+        ? "OPENAI_API_KEY OK."
+        : "Add OPENAI_API_KEY in Vercel → Environment Variables → Redeploy.",
+      dartKeyConfigured
+        ? "DART_API_KEY OK (Korea filing tables will attach)."
+        : "Optional: DART_API_KEY from opendart.fss.or.kr for real FS + executive/employee tables.",
+    ].join(" "),
   });
 }

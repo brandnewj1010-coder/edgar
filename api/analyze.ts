@@ -1,5 +1,12 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import OpenAI from "openai";
+import {
+  bundleToMarkdown,
+  bundleToPromptSnippet,
+  fetchDartFinancialBundle,
+  findCorp,
+  loadCorpList,
+} from "./lib/dart";
 
 /** Vercel 플랜에 따라 상한이 다릅니다 */
 export const config = { maxDuration: 60 };
@@ -11,14 +18,30 @@ type Body = {
   query?: string;
 };
 
-/** 본문이 너무 짧으면 재시도(검색 없는 프롬프트) */
+/** 본문이 너무 짧으면 재시도(보조 프롬프트) — 오픈다트 표가 있으면 완화 */
 const MIN_REPORT_CHARS = 180;
 
-function buildPrimaryPrompt(source: Source, q: string): string {
+function buildPrimaryPrompt(
+  source: Source,
+  q: string,
+  dartContext: string | null,
+): string {
   const name = q.trim();
+  const dataBlock = dartContext
+    ? `
+
+[오픈다트에서 불러온 실제 공시 수치 — 아래 내용은 금융감독원 API 원문입니다]
+${dartContext}
+
+위 표의 **계정명·금액만** 근거로 해설하세요. 표에 없는 숫자·추정 실적은 쓰지 마세요.
+`
+    : `
+(참고: 서버에 DART_API_KEY가 없거나 미국 기업이면 실시간 공시 표를 붙이지 못합니다. 일반 학습용 설명으로만 작성하세요.)
+`;
+
   if (source === "dart") {
     return `당신은 **회계·재무를 공부하는 직장인**을 위한 공시 읽기 도우미입니다.
-학습에 도움이 되도록 **일반적으로 알려진 공시·재무제표 개념**과 "${name}"에 대해 알려진 공개 정보를 바탕으로 설명하세요. (실시간 웹 검색은 없습니다. 최신 수치·공시는 사용자가 DART에서 직접 확인해야 합니다.)
+${dataBlock}
 
 분석 대상: "${name}" (기업명 또는 6자리 종목코드)
 
@@ -26,14 +49,15 @@ function buildPrimaryPrompt(source: Source, q: string): string {
 
 # 오늘 이 공시에서 잡을 줄기
 # 손익·이익률 — 직장인이 스스로 물어볼 질문 3가지
-# 재무 건전성·현금 (핵심만)
+# 재무 건전성·현금 (핵심만) — 위 표의 자산·부채·현금흐름 계정을 인용
 # 오늘의 용어 5개 (짧은 정의와 함께)
 # 다음에 DART에서 더 볼 곳
 
 - 투자 권유·매수·매도 추천 금지.
 - 불확실하면 "교육용 요약"임을 밝히기.`;
   }
-  return `Help Korean office workers study US SEC filings. Use general knowledge about "${name}" and typical filing patterns. (No live web search; user should verify on EDGAR.)
+  return `Help Korean office workers study US SEC filings for "${name}".
+${dartContext ? "" : "(No live EDGAR fetch in this app yet — general educational summary only.)"}
 
 Output **Markdown only**. No empty reply. Fill every # section with real paragraphs or a small table.
 
@@ -150,19 +174,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const dartKey = process.env.DART_API_KEY?.trim();
+  let dartTablesMarkdown = "";
+  let dartPromptSnippet: string | null = null;
+
+  if (source === "dart" && dartKey) {
+    try {
+      const corps = await loadCorpList(dartKey);
+      const corp = findCorp(query, corps);
+      if (!corp) {
+        res.status(400).json({
+          error:
+            "상장사를 찾지 못했습니다. **6자리 종목코드**(예: 005930)로 다시 검색해 보세요.",
+        });
+        return;
+      }
+      const bundle = await fetchDartFinancialBundle(dartKey, corp);
+      dartTablesMarkdown = bundleToMarkdown(bundle);
+      dartPromptSnippet = bundleToPromptSnippet(bundle);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[analyze dart]", msg);
+      res.status(502).json({
+        error:
+          "오픈다트에서 재무제표를 가져오지 못했습니다. DART_API_KEY·기업 지정이 맞는지 확인하거나 잠시 후 다시 시도해 주세요.",
+        detail: msg,
+      });
+      return;
+    }
+  }
+
   const client = new OpenAI({ apiKey });
 
   try {
     let completion = await chatWithRetry(client, {
       model,
-      messages: [{ role: "user", content: buildPrimaryPrompt(source, query) }],
+      messages: [
+        {
+          role: "user",
+          content: buildPrimaryPrompt(source, query, dartPromptSnippet),
+        },
+      ],
       max_tokens: 8192,
     });
 
     let reportMarkdown = extractMessageText(completion);
     let usedFallback = false;
 
-    if (reportMarkdown.length < MIN_REPORT_CHARS) {
+    const hasDartTables = dartTablesMarkdown.length > 400;
+    const minLen = hasDartTables ? 80 : MIN_REPORT_CHARS;
+
+    if (reportMarkdown.length < minLen) {
       usedFallback = true;
       completion = await chatWithRetry(client, {
         model,
@@ -181,8 +243,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    if (usedFallback) {
+    if (usedFallback && !hasDartTables) {
       reportMarkdown = `${reportMarkdown}\n\n---\n*위 본문은 짧은 응답이 나와 **보조 설명**으로 다시 생성한 것입니다. 최신 수치는 DART·공시 원문과 함께 확인하세요.*\n`;
+    } else if (usedFallback && hasDartTables) {
+      reportMarkdown = `${reportMarkdown}\n\n---\n*AI 해설이 짧아 보조 생성을 한 단계 더 거쳤습니다. 수치는 상단 오픈다트 표를 기준으로 하세요.*\n`;
+    }
+
+    if (dartTablesMarkdown) {
+      reportMarkdown = `${dartTablesMarkdown}\n\n---\n\n## AI 해설 노트\n\n${reportMarkdown}`;
     }
 
     res.status(200).json({
@@ -191,7 +259,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       reflectionPrompts: [],
       sankey: null,
       groundingQueries: [],
-      sources: [],
+      sources: dartTablesMarkdown
+        ? [
+            {
+              title: "오픈다트 (금융감독원 전자공시)",
+              uri: "https://opendart.fss.or.kr/",
+            },
+            { title: "DART 공시시스템", uri: "https://dart.fss.or.kr/" },
+          ]
+        : [],
       model: usedFallback ? `${model} (fallback)` : model,
       source,
       query,
