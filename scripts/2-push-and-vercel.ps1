@@ -61,7 +61,7 @@ if (-not $GitHubRepoUrl) {
   Write-Host ""
   Write-Host "Vercel:" -ForegroundColor Cyan
   Write-Host "  https://vercel.com/new → GitHub 연결 → 이 저장소 Import"
-  Write-Host "  Environment Variables: GEMINI_API_KEY, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY"
+  Write-Host "  Environment Variables: OPENAI_API_KEY, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY"
   exit 0
 }
 
@@ -82,4 +82,4 @@ Write-Host ""
 Write-Host "푸시가 끝나면 Vercel 에서 Import 하세요:" -ForegroundColor Green
 Write-Host "  https://vercel.com/new"
 Write-Host "  Root Directory: insight-analyzer 가 아니라 저장소 루트가 이 폴더면 그대로"
-Write-Host "  환경 변수: GEMINI_API_KEY, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY"
+Write-Host "  환경 변수: OPENAI_API_KEY, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY"

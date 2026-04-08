@@ -17,19 +17,19 @@ import { ReportActions } from "./components/ReportActions";
 
 function analyzeErrorExtraHint(error: string, isLocalhost: boolean): ReactNode {
   const e = error;
-  if (/503|UNAVAILABLE|high demand/i.test(e)) {
+  if (/503|UNAVAILABLE|high demand|overloaded/i.test(e)) {
     return (
       <p>
-        <strong className="text-rose-900">Google AI 일시 과부하(503)입니다.</strong>{" "}
+        <strong className="text-rose-900">AI 서비스 일시 과부하(503)일 수 있습니다.</strong>{" "}
         잠시 후 다시 시도해 보세요.
       </p>
     );
   }
-  if (/429|RESOURCE_EXHAUSTED|quota|한도/i.test(e)) {
+  if (/429|RESOURCE_EXHAUSTED|quota|한도|rate limit/i.test(e)) {
     return (
       <p>
         <strong className="text-rose-900">API 호출 한도에 걸렸을 수 있습니다.</strong>{" "}
-        시간을 두고 재시도하거나 AI Studio에서 할당량을 확인해 주세요.
+        시간을 두고 재시도하거나 OpenAI 대시보드(Usage / Limits)에서 확인해 주세요.
       </p>
     );
   }
@@ -40,7 +40,7 @@ function analyzeErrorExtraHint(error: string, isLocalhost: boolean): ReactNode {
         <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
           .env.local
         </code>{" "}
-        에 <code className="font-mono text-[11px]">GEMINI_API_KEY</code> 후{" "}
+        에 <code className="font-mono text-[11px]">OPENAI_API_KEY</code> 후{" "}
         <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
           npm run dev:vercel
         </code>
@@ -51,7 +51,7 @@ function analyzeErrorExtraHint(error: string, isLocalhost: boolean): ReactNode {
   return (
     <p>
       <strong className="text-rose-900">배포에서만 실패할 때:</strong> Vercel
-      환경 변수 <code className="font-mono text-[11px]">GEMINI_API_KEY</code> 확인
+      환경 변수 <code className="font-mono text-[11px]">OPENAI_API_KEY</code> 확인
       후 <strong>Redeploy</strong>.
     </p>
   );
@@ -147,7 +147,7 @@ export default function App() {
                 공시 해설 노트
               </p>
               <p className="truncate text-sm text-slate-800">
-                Gemini · 검색 연동 (가능할 때)
+                OpenAI · ChatGPT API
                 {result?.model ? (
                   <span className="ml-1.5 font-mono text-xs font-normal text-slate-400">
                     · {result.model}
@@ -203,7 +203,7 @@ export default function App() {
                   공시 읽기 해설을 만드는 중이에요
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
-                  검색이 붙으면 조금 걸릴 수 있어요. 짧게 나오면 자동으로 한 번 더
+                  보통 10~40초 정도 걸릴 수 있어요. 짧게 나오면 자동으로 한 번 더
                   요청해 볼 수도 있어요.
                 </p>
               </div>

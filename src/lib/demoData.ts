@@ -2,7 +2,7 @@ import type { AnalyzeResponse, DisclosureSource } from "../types";
 
 const md = (title: string) => `# ${title}
 
-이 화면은 **API 없이** 레이아웃을 확인하는 **데모**입니다. 실제 공시 해설은 Vercel에 배포하고 \`GEMINI_API_KEY\`를 설정한 뒤 데모 모드를 끄세요.
+이 화면은 **API 없이** 레이아웃을 확인하는 **데모**입니다. 실제 공시 해설은 Vercel에 배포하고 \`OPENAI_API_KEY\`를 설정한 뒤 데모 모드를 끄세요.
 
 ## 오늘 이 공시에서 잡을 줄기
 
