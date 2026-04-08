@@ -4,31 +4,19 @@ import { demoAnalyzeResponse } from "./demoData";
 export async function requestAnalyze(
   source: DisclosureSource,
   query: string,
-  opts?: {
-    demo?: boolean;
-    compareWith?: string;
-    fiscalYears?: number[];
-  },
+  opts?: { demo?: boolean },
 ): Promise<AnalyzeResponse> {
   const useDemo =
     opts?.demo === true || import.meta.env.VITE_USE_DEMO === "1";
   if (useDemo) {
-    await new Promise((r) => setTimeout(r, 600));
-    return demoAnalyzeResponse(source, query, {
-      compareWith: opts?.compareWith,
-      fiscalYears: opts?.fiscalYears,
-    });
+    await new Promise((r) => setTimeout(r, 500));
+    return demoAnalyzeResponse(source, query);
   }
-
-  const body: Record<string, unknown> = { source, query };
-  const cw = opts?.compareWith?.trim();
-  if (cw) body.compareWith = cw;
-  if (opts?.fiscalYears?.length) body.fiscalYears = opts.fiscalYears;
 
   const res = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ source, query }),
   });
 
   const data = (await res.json()) as AnalyzeResponse & {
@@ -40,8 +28,7 @@ export async function requestAnalyze(
     const parts = [data.error, data.detail].filter(
       (s): s is string => typeof s === "string" && s.length > 0,
     );
-    const msg =
-      parts.join(" — ") || `요청 실패 (${res.status})`;
+    const msg = parts.join(" — ") || `요청 실패 (${res.status})`;
     throw new Error(msg);
   }
 

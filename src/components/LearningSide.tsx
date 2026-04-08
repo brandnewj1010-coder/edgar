@@ -1,8 +1,6 @@
 import { BookMarked, Link2 } from "lucide-react";
 import { FINANCIAL_TERMS } from "../data/financialTerms";
-import type { FinancialTermEntry, QuizItem, ReflectionItem } from "../types";
-import { QuizPanel } from "./QuizPanel";
-import { ReflectionPanel } from "./ReflectionPanel";
+import type { FinancialTermEntry } from "../types";
 
 function termsInReport(markdown: string): FinancialTermEntry[] {
   const lower = markdown.toLowerCase();
@@ -21,14 +19,10 @@ function termsInReport(markdown: string): FinancialTermEntry[] {
 
 export function LearningSide({
   reportMarkdown,
-  quiz,
-  reflectionPrompts,
   sources,
   groundingQueries,
 }: {
   reportMarkdown: string;
-  quiz: QuizItem[];
-  reflectionPrompts: ReflectionItem[];
   sources: { title: string; uri: string }[];
   groundingQueries: string[];
 }) {
@@ -45,8 +39,8 @@ export function LearningSide({
         </h3>
         {terms.length === 0 ? (
           <p className="text-xs leading-relaxed text-slate-500">
-            사전에 등록된 용어가 리포트에서 감지되지 않았습니다. Phase 2에서
-            용어 DB를 확장할 수 있습니다.
+            리포트에 사전 등록 용어가 아직 없습니다. 본문을 길게 생성하면
+            자동으로 잡힙니다.
           </p>
         ) : (
           <ul className="space-y-2.5">
@@ -64,12 +58,12 @@ export function LearningSide({
       </section>
 
       {(sources.length > 0 || groundingQueries.length > 0) && (
-        <section className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm">
+        <section className="mt-auto rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm">
           <h3 className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-slate-900">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
               <Link2 className="h-3.5 w-3.5" />
             </span>
-            검색·근거 힌트
+            검색·참고
           </h3>
           {groundingQueries.length > 0 && (
             <ul className="mb-2 list-inside list-disc text-xs text-slate-600">
@@ -80,7 +74,7 @@ export function LearningSide({
           )}
           {sources.length > 0 && (
             <ul className="space-y-1">
-              {sources.slice(0, 6).map((s, i) => (
+              {sources.slice(0, 8).map((s, i) => (
                 <li key={i}>
                   <a
                     href={s.uri}
@@ -96,14 +90,6 @@ export function LearningSide({
           )}
         </section>
       )}
-
-      <section className="rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm">
-        <ReflectionPanel items={reflectionPrompts} />
-      </section>
-
-      <section className="mt-auto rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm">
-        <QuizPanel quiz={quiz} />
-      </section>
     </div>
   );
 }

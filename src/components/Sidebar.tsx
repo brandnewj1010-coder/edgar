@@ -8,10 +8,6 @@ export function Sidebar({
   onSource,
   query,
   onQuery,
-  compareWith,
-  onCompareWith,
-  fiscalYears,
-  onToggleFiscalYear,
   onSubmit,
   loading,
   recent,
@@ -24,17 +20,12 @@ export function Sidebar({
   onSource: (s: DisclosureSource) => void;
   query: string;
   onQuery: (q: string) => void;
-  compareWith: string;
-  onCompareWith: (v: string) => void;
-  fiscalYears: number[];
-  onToggleFiscalYear: (year: number) => void;
   onSubmit: () => void;
   loading: boolean;
   recent: RecentItem[];
   onPickRecent: (r: RecentItem) => void;
   demoMode: boolean;
   onDemoMode: (v: boolean) => void;
-  /** VITE_SUPABASE_* 설정 시 true — 최근 기록이 클라우드와 동기화됩니다 */
   supabaseConnected: boolean;
 }) {
   return (
@@ -46,9 +37,11 @@ export function Sidebar({
           </div>
           <div>
             <h1 className="text-[15px] font-bold tracking-tight text-slate-900">
-              InsightAnalyzer
+              공시로 회계 공부
             </h1>
-            <p className="text-[11px] text-slate-500">교육형 공시 AI 분석</p>
+            <p className="text-[11px] text-slate-500">
+              직장인 학습용 · DART / EDGAR
+            </p>
           </div>
         </div>
       </div>
@@ -116,57 +109,6 @@ export function Sidebar({
           </div>
         </div>
 
-        <div>
-          <label
-            htmlFor="compare"
-            className="mb-1.5 block text-xs font-medium text-slate-600"
-          >
-            비교 기업 (선택)
-          </label>
-          <input
-            id="compare"
-            value={compareWith}
-            onChange={(e) => onCompareWith(e.target.value)}
-            placeholder={
-              source === "dart"
-                ? "예: SK하이닉스, 000660"
-                : "예: GOOGL"
-            }
-            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 text-sm outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15"
-          />
-          <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-            입력 시 한 리포트에서 A vs B로 나란히 요약합니다.
-          </p>
-        </div>
-
-        <div>
-          <span className="mb-1.5 block text-xs font-medium text-slate-600">
-            연도 비교 (복수 선택)
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {[2023, 2024, 2025].map((y) => {
-              const on = fiscalYears.includes(y);
-              return (
-                <button
-                  key={y}
-                  type="button"
-                  onClick={() => onToggleFiscalYear(y)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                    on
-                      ? "border-indigo-500 bg-indigo-50 text-indigo-900"
-                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
-                  }`}
-                >
-                  {y}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-1 text-[10px] text-slate-400">
-            선택한 연도를 표·불릿으로 한눈에 비교하도록 요청합니다.
-          </p>
-        </div>
-
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
           <input
             type="checkbox"
@@ -174,7 +116,7 @@ export function Sidebar({
             onChange={(e) => onDemoMode(e.target.checked)}
             className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
           />
-          데모 모드 (API 없이 UI만)
+          데모 (API 없이 샘플만)
         </label>
 
         <TermOfTheDay />
@@ -182,7 +124,7 @@ export function Sidebar({
         <div className="mt-1 flex-1 overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/40 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             <History className="h-3.5 w-3.5 text-indigo-500" />
-            저장된 리포트
+            최근 리포트
             {supabaseConnected ? (
               <span className="rounded-md bg-emerald-100/90 px-1.5 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-emerald-800">
                 클라우드
@@ -196,9 +138,9 @@ export function Sidebar({
           <ul className="max-h-52 space-y-1.5 overflow-y-auto pr-0.5 text-[12px]">
             {recent.length === 0 ? (
               <li className="py-2 text-center text-[11px] leading-relaxed text-slate-400">
-                분석을 한 번 돌리면
+                해설을 한 번 받으면
                 <br />
-                본문·퀴즈까지 여기 쌓여요.
+                여기에 쌓여요.
               </li>
             ) : (
               recent.map((r) => (
@@ -235,13 +177,13 @@ export function Sidebar({
           {supabaseConnected ? (
             <>
               <span className="font-medium text-emerald-700">Supabase</span>에
-              리포트 전체가 저장됩니다.
+              리포트가 저장됩니다.
             </>
           ) : (
             <>
-              지금은 이 브라우저에만 리포트가 저장돼요. 여러 기기에서 보려면{" "}
+              지금은 이 브라우저에만 저장돼요. 여러 기기에서 보려면{" "}
               <code className="rounded bg-slate-100 px-0.5">VITE_SUPABASE_*</code>{" "}
-              를 Vercel에 넣고 SQL 마이그레이션을 실행하세요.
+              를 설정하세요.
             </>
           )}
         </p>

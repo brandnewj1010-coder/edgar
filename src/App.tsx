@@ -14,18 +14,14 @@ import { isSupabaseConfigured } from "./lib/supabase";
 import type { AnalyzeResponse, DisclosureSource } from "./types";
 import { ReportDocument } from "./components/ReportDocument";
 import { ReportActions } from "./components/ReportActions";
-import { SankeyViz } from "./components/SankeyViz";
-import { KrwAssistView } from "./components/KrwAssistView";
 
-/** 오류 종류에 맞는 안내 (503·한도는 Vercel 키 안내와 혼동되지 않게) */
 function analyzeErrorExtraHint(error: string, isLocalhost: boolean): ReactNode {
   const e = error;
   if (/503|UNAVAILABLE|high demand/i.test(e)) {
     return (
       <p>
         <strong className="text-rose-900">Google AI 일시 과부하(503)입니다.</strong>{" "}
-        키가 잘못된 것이 아니라, 요청이 몰릴 때 나는 메시지예요.{" "}
-        <strong>잠시 후 다시 시도</strong>해 보세요.
+        잠시 후 다시 시도해 보세요.
       </p>
     );
   }
@@ -33,37 +29,30 @@ function analyzeErrorExtraHint(error: string, isLocalhost: boolean): ReactNode {
     return (
       <p>
         <strong className="text-rose-900">API 호출 한도에 걸렸을 수 있습니다.</strong>{" "}
-        시간을 두고 재시도하거나, AI Studio에서 할당량·결제를 확인해 주세요.
+        시간을 두고 재시도하거나 AI Studio에서 할당량을 확인해 주세요.
       </p>
     );
   }
   if (isLocalhost) {
     return (
       <p>
-        <strong className="text-rose-900">지금 주소가 localhost예요.</strong>{" "}
-        Vercel에 넣은 키는 <strong>배포된 사이트</strong>에만 적용됩니다.
-        로컬에서 쓰려면 프로젝트 폴더의{" "}
+        <strong className="text-rose-900">localhost입니다.</strong>{" "}
         <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
           .env.local
         </code>{" "}
-        에 <code className="font-mono text-[11px]">GEMINI_API_KEY</code>를 넣고{" "}
+        에 <code className="font-mono text-[11px]">GEMINI_API_KEY</code> 후{" "}
         <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
           npm run dev:vercel
-        </code>{" "}
-        로 실행하세요. (또는 왼쪽 데모 모드)
+        </code>
+        , 또는 데모 모드.
       </p>
     );
   }
   return (
     <p>
-      <strong className="text-rose-900">배포 사이트에서만 안 될 때:</strong>{" "}
-      Vercel → 해당 프로젝트 → Settings → Environment Variables 에
-      <code className="mx-0.5 rounded bg-white/90 px-1 font-mono text-[11px]">
-        GEMINI_API_KEY
-      </code>
-      가 있는지 확인한 뒤, 꼭{" "}
-      <strong>Deployments → 최신 배포 → Redeploy</strong> 해 주세요.
-      변수를 나중에 넣으면 예전 빌드에는 키가 없을 수 있어요.
+      <strong className="text-rose-900">배포에서만 실패할 때:</strong> Vercel
+      환경 변수 <code className="font-mono text-[11px]">GEMINI_API_KEY</code> 확인
+      후 <strong>Redeploy</strong>.
     </p>
   );
 }
@@ -71,8 +60,6 @@ function analyzeErrorExtraHint(error: string, isLocalhost: boolean): ReactNode {
 export default function App() {
   const [source, setSource] = useState<DisclosureSource>("dart");
   const [query, setQuery] = useState("");
-  const [compareWith, setCompareWith] = useState("");
-  const [fiscalYears, setFiscalYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,11 +79,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const data = await requestAnalyze(source, q, {
-        demo: demoMode,
-        compareWith: compareWith.trim() || undefined,
-        fiscalYears: fiscalYears.length ? fiscalYears : undefined,
-      });
+      const data = await requestAnalyze(source, q, { demo: demoMode });
       setResult(data);
       await saveReport(data);
       setRecent(await loadRecentList());
@@ -106,7 +89,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [query, source, demoMode, compareWith, fiscalYears]);
+  }, [query, source, demoMode]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -128,8 +111,6 @@ export default function App() {
       const full = await loadReportById(r.id);
       if (full) {
         setResult(full);
-        setCompareWith(full.compareWith ?? "");
-        setFiscalYears(full.fiscalYears ?? []);
       } else {
         setResult(null);
         setError("저장된 리포트를 불러오지 못했습니다.");
@@ -146,16 +127,6 @@ export default function App() {
         onSource={setSource}
         query={query}
         onQuery={setQuery}
-        compareWith={compareWith}
-        onCompareWith={setCompareWith}
-        fiscalYears={fiscalYears}
-        onToggleFiscalYear={(y) => {
-          setFiscalYears((prev) =>
-            prev.includes(y)
-              ? prev.filter((x) => x !== y)
-              : [...prev, y].sort((a, b) => a - b),
-          );
-        }}
         onSubmit={run}
         loading={loading}
         recent={recent}
@@ -173,10 +144,10 @@ export default function App() {
             </div>
             <div className="min-w-0">
               <p className="truncate text-xs font-medium text-slate-500">
-                AI 공시 분석 리포트
+                공시 해설 노트
               </p>
               <p className="truncate text-sm text-slate-800">
-                Gemini Flash · Search Grounding
+                Gemini · 검색 연동 (가능할 때)
                 {result?.model ? (
                   <span className="ml-1.5 font-mono text-xs font-normal text-slate-400">
                     · {result.model}
@@ -192,7 +163,7 @@ export default function App() {
             <div className="mx-auto mb-6 max-w-3xl rounded-2xl border border-rose-200/90 bg-rose-50/90 px-5 py-4 text-sm text-rose-800 shadow-sm">
               <p className="whitespace-pre-wrap font-medium">{error}</p>
               {!demoMode && (
-                <div className="mt-3 space-y-2 text-xs leading-relaxed text-rose-700/95">
+                <div className="mt-3 text-xs leading-relaxed text-rose-700/95">
                   {analyzeErrorExtraHint(
                     error,
                     typeof window !== "undefined" &&
@@ -210,13 +181,13 @@ export default function App() {
                 <FileText className="h-7 w-7 opacity-90" />
               </div>
               <p className="text-base font-medium text-slate-800">
-                분석 리포트가 여기에 표시됩니다
+                여기에 해설이 표시됩니다
               </p>
               <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                왼쪽에서 <span className="font-medium text-slate-700">DART</span>{" "}
-                또는 <span className="font-medium text-slate-700">EDGAR</span>를
-                고르고 검색어를 입력한 뒤 분석을 시작하세요. 본문 속 용어에 마우스를
-                올리면 설명이 뜹니다.
+                <span className="font-medium text-slate-700">DART</span> 또는{" "}
+                <span className="font-medium text-slate-700">EDGAR</span>를 고르고
+                기업·티커를 넣은 뒤 검색하세요. 본문 속 용어에 마우스를 올리면
+                짧은 설명이 뜹니다.
               </p>
             </div>
           )}
@@ -229,15 +200,11 @@ export default function App() {
               />
               <div className="text-center">
                 <p className="text-sm font-medium text-slate-800">
-                  리포트를 작성하는 중이에요
+                  공시 읽기 해설을 만드는 중이에요
                 </p>
                 <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
-                  검색·리포트·퀴즈·차트까지 한 번에 처리합니다. 네트워크에 따라
-                  다르지만,{" "}
-                  <span className="font-medium text-slate-600">
-                    목표는 약 30초 이내
-                  </span>
-                  입니다. (API·검색 지연 시 더 걸릴 수 있어요)
+                  검색이 붙으면 조금 걸릴 수 있어요. 짧게 나오면 자동으로 한 번 더
+                  요청해 볼 수도 있어요.
                 </p>
               </div>
             </div>
@@ -249,7 +216,7 @@ export default function App() {
             >
               {restoring ? (
                 <p className="mb-3 text-center text-xs font-medium text-indigo-600">
-                  저장된 리포트를 불러오는 중…
+                  불러오는 중…
                 </p>
               ) : null}
               <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
@@ -263,16 +230,6 @@ export default function App() {
                         데모
                       </span>
                     ) : null}
-                    {result.compareWith ? (
-                      <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-900">
-                        기업 비교
-                      </span>
-                    ) : null}
-                    {result.fiscalYears?.length ? (
-                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-900">
-                        연도 {result.fiscalYears.join("·")}
-                      </span>
-                    ) : null}
                   </div>
                   <h2 className="truncate text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">
                     {result.query}
@@ -281,27 +238,6 @@ export default function App() {
               </div>
 
               <ReportActions reportMarkdown={result.reportMarkdown} />
-
-              <KrwAssistView reportMarkdown={result.reportMarkdown} />
-
-              {result.sankey ? (
-                <section className="mb-8 rounded-2xl border border-slate-200/90 bg-white/90 p-4 shadow-sm md:p-5">
-                  <h3 className="mb-1 text-sm font-semibold text-slate-900">
-                    {result.sankey.title ?? "재무 흐름 (샌키)"}
-                  </h3>
-                  {result.sankey.unit ? (
-                    <p className="mb-3 text-[11px] text-slate-500">
-                      단위: {result.sankey.unit}
-                    </p>
-                  ) : (
-                    <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
-                      리포트·검색으로 추정한 구조입니다. 공시 원문과 다를 수
-                      있습니다.
-                    </p>
-                  )}
-                  <SankeyViz data={result.sankey} />
-                </section>
-              ) : null}
 
               <ReportDocument>
                 <MarkdownReport markdown={result.reportMarkdown} />
@@ -314,19 +250,14 @@ export default function App() {
       <aside className="no-print hidden w-[min(100%,22rem)] shrink-0 overflow-hidden bg-ink-50 lg:block">
         <LearningSide
           reportMarkdown={result?.reportMarkdown ?? ""}
-          quiz={result?.quiz ?? []}
-          reflectionPrompts={result?.reflectionPrompts ?? []}
           sources={result?.sources ?? []}
           groundingQueries={result?.groundingQueries ?? []}
         />
       </aside>
 
-      {/* 모바일: 학습 패널을 하단 스택 */}
       <div className="no-print border-t border-slate-200 bg-ink-50 lg:hidden">
         <LearningSide
           reportMarkdown={result?.reportMarkdown ?? ""}
-          quiz={result?.quiz ?? []}
-          reflectionPrompts={result?.reflectionPrompts ?? []}
           sources={result?.sources ?? []}
           groundingQueries={result?.groundingQueries ?? []}
         />
