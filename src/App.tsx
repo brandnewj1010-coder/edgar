@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { FileText, Loader2, Sparkles } from "lucide-react";
 import { MarkdownReport } from "./components/MarkdownReport";
 import { LearningSide } from "./components/LearningSide";
@@ -16,6 +16,57 @@ import { ReportDocument } from "./components/ReportDocument";
 import { ReportActions } from "./components/ReportActions";
 import { SankeyViz } from "./components/SankeyViz";
 import { KrwAssistView } from "./components/KrwAssistView";
+
+/** 오류 종류에 맞는 안내 (503·한도는 Vercel 키 안내와 혼동되지 않게) */
+function analyzeErrorExtraHint(error: string, isLocalhost: boolean): ReactNode {
+  const e = error;
+  if (/503|UNAVAILABLE|high demand/i.test(e)) {
+    return (
+      <p>
+        <strong className="text-rose-900">Google AI 일시 과부하(503)입니다.</strong>{" "}
+        키가 잘못된 것이 아니라, 요청이 몰릴 때 나는 메시지예요.{" "}
+        <strong>잠시 후 다시 시도</strong>해 보세요.
+      </p>
+    );
+  }
+  if (/429|RESOURCE_EXHAUSTED|quota|한도/i.test(e)) {
+    return (
+      <p>
+        <strong className="text-rose-900">API 호출 한도에 걸렸을 수 있습니다.</strong>{" "}
+        시간을 두고 재시도하거나, AI Studio에서 할당량·결제를 확인해 주세요.
+      </p>
+    );
+  }
+  if (isLocalhost) {
+    return (
+      <p>
+        <strong className="text-rose-900">지금 주소가 localhost예요.</strong>{" "}
+        Vercel에 넣은 키는 <strong>배포된 사이트</strong>에만 적용됩니다.
+        로컬에서 쓰려면 프로젝트 폴더의{" "}
+        <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
+          .env.local
+        </code>{" "}
+        에 <code className="font-mono text-[11px]">GEMINI_API_KEY</code>를 넣고{" "}
+        <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
+          npm run dev:vercel
+        </code>{" "}
+        로 실행하세요. (또는 왼쪽 데모 모드)
+      </p>
+    );
+  }
+  return (
+    <p>
+      <strong className="text-rose-900">배포 사이트에서만 안 될 때:</strong>{" "}
+      Vercel → 해당 프로젝트 → Settings → Environment Variables 에
+      <code className="mx-0.5 rounded bg-white/90 px-1 font-mono text-[11px]">
+        GEMINI_API_KEY
+      </code>
+      가 있는지 확인한 뒤, 꼭{" "}
+      <strong>Deployments → 최신 배포 → Redeploy</strong> 해 주세요.
+      변수를 나중에 넣으면 예전 빌드에는 키가 없을 수 있어요.
+    </p>
+  );
+}
 
 export default function App() {
   const [source, setSource] = useState<DisclosureSource>("dart");
@@ -142,34 +193,11 @@ export default function App() {
               <p className="whitespace-pre-wrap font-medium">{error}</p>
               {!demoMode && (
                 <div className="mt-3 space-y-2 text-xs leading-relaxed text-rose-700/95">
-                  {typeof window !== "undefined" &&
-                  (window.location.hostname === "localhost" ||
-                    window.location.hostname === "127.0.0.1") ? (
-                    <p>
-                      <strong className="text-rose-900">지금 주소가 localhost예요.</strong>{" "}
-                      Vercel에 넣은 키는 <strong>배포된 사이트</strong>에만 적용됩니다.
-                      로컬에서 쓰려면 프로젝트 폴더의{" "}
-                      <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
-                        .env.local
-                      </code>{" "}
-                      에 <code className="font-mono text-[11px]">GEMINI_API_KEY</code>를
-                      넣고{" "}
-                      <code className="rounded bg-white/90 px-1 font-mono text-[11px]">
-                        npm run dev:vercel
-                      </code>{" "}
-                      로 실행하세요. (또는 왼쪽 데모 모드)
-                    </p>
-                  ) : (
-                    <p>
-                      <strong className="text-rose-900">배포 사이트에서만 안 될 때:</strong>{" "}
-                      Vercel → 해당 프로젝트 → Settings → Environment Variables 에
-                      <code className="mx-0.5 rounded bg-white/90 px-1 font-mono text-[11px]">
-                        GEMINI_API_KEY
-                      </code>
-                      가 있는지 확인한 뒤, 꼭{" "}
-                      <strong>Deployments → 최신 배포 → Redeploy</strong> 해 주세요.
-                      변수를 나중에 넣으면 예전 빌드에는 키가 없을 수 있어요.
-                    </p>
+                  {analyzeErrorExtraHint(
+                    error,
+                    typeof window !== "undefined" &&
+                      (window.location.hostname === "localhost" ||
+                        window.location.hostname === "127.0.0.1"),
                   )}
                 </div>
               )}

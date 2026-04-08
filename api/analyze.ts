@@ -126,13 +126,27 @@ function splitCombinedResponse(raw: string): {
   const idx = full.indexOf(EXTRAS_DELIM);
   if (idx === -1) {
     const m = full.match(/\{[\s\S]*"quiz"\s*:/);
-    if (m && m.index !== undefined && m.index > 0) {
-      return {
-        reportMarkdown: full.slice(0, m.index).trim(),
-        extrasJson: full.slice(m.index).trim(),
-      };
+    if (m && m.index !== undefined) {
+      if (m.index > 0) {
+        return {
+          reportMarkdown: full.slice(0, m.index).trim(),
+          extrasJson: full.slice(m.index).trim(),
+        };
+      }
+      /** JSON만 오고 마크다운이 없을 때 */
+      return { reportMarkdown: "", extrasJson: full.trim() };
     }
     return { reportMarkdown: full, extrasJson: null };
+  }
+  /** 구분선이 맨 앞이면 리포트 본문 없음 */
+  if (idx === 0) {
+    let extras = full.slice(idx + EXTRAS_DELIM.length).trim();
+    extras = extras
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+    return { reportMarkdown: "", extrasJson: extras || null };
   }
   const reportMarkdown = full.slice(0, idx).trim();
   let extras = full.slice(idx + EXTRAS_DELIM.length).trim();
@@ -309,7 +323,11 @@ async function generateWithRetry(
         msg.includes("429") ||
         msg.toLowerCase().includes("rate limit") ||
         msg.toLowerCase().includes("quota");
-      if (isRateLimit && attempt < maxRetries) {
+      const isOverload =
+        msg.includes("503") ||
+        msg.includes("UNAVAILABLE") ||
+        msg.toLowerCase().includes("high demand");
+      if ((isRateLimit || isOverload) && attempt < maxRetries) {
         await sleep((attempt + 1) * 6000);
         continue;
       }
@@ -317,6 +335,49 @@ async function generateWithRetry(
     }
   }
   throw new Error("Max retries exceeded");
+}
+
+/** SDK가 text 대신 parts만 줄 때 대비 */
+function extractModelText(
+  analysis: Awaited<ReturnType<GoogleGenAI["models"]["generateContent"]>>,
+): string {
+  const direct = analysis.text?.trim();
+  if (direct) return direct;
+  const cands = analysis.candidates;
+  if (!cands?.length) return "";
+  const out: string[] = [];
+  for (const c of cands) {
+    const parts = c.content?.parts;
+    if (!parts) continue;
+    for (const p of parts) {
+      if (
+        p &&
+        typeof p === "object" &&
+        "text" in p &&
+        typeof (p as { text?: string }).text === "string"
+      ) {
+        out.push((p as { text: string }).text);
+      }
+    }
+  }
+  return out.join("\n").trim();
+}
+
+/** 리포트만 비었을 때 사용자에게 보여 줄 최소 본문 */
+function fallbackReportMarkdown(rawText: string): string {
+  const clip = rawText.length > 8000 ? `${rawText.slice(0, 8000)}\n\n…(이하 생략)` : rawText;
+  return `# 안내
+
+모델이 **마크다운 리포트와 부가 JSON을 구분선 형식으로 보내지 않아** 본문만 비어 보였습니다. (형식 미준수·일시 오류·길이 제한 등)
+
+**잠시 후 다시 분석**을 눌러 주세요. 아래는 서버가 받은 원문 일부입니다.
+
+---
+
+\`\`\`text
+${clip}
+\`\`\`
+`;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -389,22 +450,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
 
-    const rawText =
-      analysis.text?.trim() ??
-      analysis.candidates?.[0]?.content?.parts
-        ?.map((p) => ("text" in p ? p.text : ""))
-        .join("\n")
-        .trim() ??
-      "";
+    const rawText = extractModelText(analysis);
 
     if (!rawText) {
       res.status(502).json({ error: "모델 응답이 비어 있습니다." });
       return;
     }
 
-    const { reportMarkdown, extrasJson } = splitCombinedResponse(rawText);
+    let { reportMarkdown, extrasJson } = splitCombinedResponse(rawText);
 
-    if (!reportMarkdown) {
+    if (!reportMarkdown.trim()) {
+      reportMarkdown =
+        extrasJson != null
+          ? fallbackReportMarkdown(rawText)
+          : rawText;
+    }
+
+    if (!reportMarkdown.trim()) {
       res.status(502).json({ error: "모델 응답이 비어 있습니다." });
       return;
     }
