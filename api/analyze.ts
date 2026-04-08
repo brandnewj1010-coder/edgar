@@ -79,6 +79,115 @@ Output: **Markdown** with sections:
 Use clear headings and bullet points where helpful.`;
 }
 
+/** 한 번의 generateContent로 리포트 + 부가 JSON까지 받기 위한 프롬프트 (API 호출 1회로 할당량 절약) */
+function buildSingleShotPrompt(
+  source: Source,
+  query: string,
+  opts: { compareWith?: string; fiscalYears?: number[] },
+): string {
+  const base = buildAnalysisPrompt(source, query, opts);
+  return `${base}
+
+---
+
+[출력 규칙 — 반드시 순서대로, 한 번에]
+
+1) **먼저** 위 지침대로 전체 분석 리포트를 마크다운으로 작성합니다.
+
+2) 리포트 본문이 끝난 직후, **그 다음 줄에만** 아래 구분선을 **정확히 한 줄**로 넣습니다 (앞뒤 공백 없음):
+---INSIGHT_EXTRAS_JSON---
+
+3) 구분선 **다음 줄부터** 아래 스키마에 맞는 **JSON만** 출력합니다. 설명 문장·마크다운 코드펜스(\`\`\`)는 넣지 마세요.
+
+스키마:
+{
+  "quiz": [ {"question":"", "choices":["","","",""], "correctIndex": 0 } ],
+  "reflection": [ {"title":"", "prompt":"" } ],
+  "sankey": {
+    "title": "",
+    "unit": "억 원",
+    "nodes": [ {"id":"", "label":"", "category": "revenue|profit|expense|neutral" } ],
+    "links": [ {"source":"", "target":"", "value": 0 } ]
+  }
+}
+
+- quiz: 객관식 **정확히 4문항**, 한국어, 리포트 내용만 근거.
+- reflection: 서술형 **생각해볼 과제 3개** (객관식과 중복 금지).
+- sankey: 리포트·검색에 나온 숫자·비중을 활용. 불명확하면 교육용 추정치로 채우고 unit에 단위 명시. nodes[].category는 revenue·profit·expense·neutral 중 선택, links의 source/target은 nodes[].id와 일치.`;
+}
+
+const EXTRAS_DELIM = "---INSIGHT_EXTRAS_JSON---";
+
+function splitCombinedResponse(raw: string): {
+  reportMarkdown: string;
+  extrasJson: string | null;
+} {
+  const full = raw.trim();
+  const idx = full.indexOf(EXTRAS_DELIM);
+  if (idx === -1) {
+    const m = full.match(/\{[\s\S]*"quiz"\s*:/);
+    if (m && m.index !== undefined && m.index > 0) {
+      return {
+        reportMarkdown: full.slice(0, m.index).trim(),
+        extrasJson: full.slice(m.index).trim(),
+      };
+    }
+    return { reportMarkdown: full, extrasJson: null };
+  }
+  const reportMarkdown = full.slice(0, idx).trim();
+  let extras = full.slice(idx + EXTRAS_DELIM.length).trim();
+  extras = extras
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  return { reportMarkdown, extrasJson: extras || null };
+}
+
+function parseExtrasPayload(extrasJson: string | null): {
+  quiz: ReturnType<typeof normalizeQuizItems>;
+  reflectionPrompts: ReturnType<typeof normalizeReflection>;
+  sankey: ReturnType<typeof normalizeSankey>;
+} {
+  const empty = {
+    quiz: normalizeQuizItems([]),
+    reflectionPrompts: normalizeReflection([]),
+    sankey: null as ReturnType<typeof normalizeSankey>,
+  };
+  if (!extrasJson) return empty;
+  try {
+    const parsed = JSON.parse(extrasJson) as {
+      quiz?: unknown;
+      reflection?: unknown;
+      sankey?: unknown;
+    };
+    return {
+      quiz: normalizeQuizItems(parsed.quiz),
+      reflectionPrompts: normalizeReflection(parsed.reflection),
+      sankey: normalizeSankey(parsed.sankey),
+    };
+  } catch {
+    try {
+      const cleaned = extrasJson
+        .replace(/^```json\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+      const parsed2 = JSON.parse(cleaned) as {
+        quiz?: unknown;
+        reflection?: unknown;
+        sankey?: unknown;
+      };
+      return {
+        quiz: normalizeQuizItems(parsed2.quiz),
+        reflectionPrompts: normalizeReflection(parsed2.reflection),
+        sankey: normalizeSankey(parsed2.sankey),
+      };
+    } catch {
+      return empty;
+    }
+  }
+}
+
 function normalizeQuizItems(raw: unknown): {
   question: string;
   choices: string[];
@@ -265,20 +374,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const ai = new GoogleGenAI({ apiKey });
 
   try {
-    const userPrompt = buildAnalysisPrompt(source, query, {
+    /** Gemini 호출은 분석 1회당 1번만 (리포트+퀴즈+성찰+샌키 동시 생성 → 무료 할당량 절약) */
+    const combinedPrompt = buildSingleShotPrompt(source, query, {
       compareWith,
       fiscalYears: fiscalYears ?? [],
     });
 
     const analysis = await generateWithRetry(ai, {
       model,
-      contents: userPrompt,
+      contents: combinedPrompt,
       config: {
         tools: [{ googleSearch: {} }],
+        maxOutputTokens: 16384,
       },
     });
 
-    const reportMarkdown =
+    const rawText =
       analysis.text?.trim() ??
       analysis.candidates?.[0]?.content?.parts
         ?.map((p) => ("text" in p ? p.text : ""))
@@ -286,10 +397,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .trim() ??
       "";
 
+    if (!rawText) {
+      res.status(502).json({ error: "모델 응답이 비어 있습니다." });
+      return;
+    }
+
+    const { reportMarkdown, extrasJson } = splitCombinedResponse(rawText);
+
     if (!reportMarkdown) {
       res.status(502).json({ error: "모델 응답이 비어 있습니다." });
       return;
     }
+
+    const { quiz, reflectionPrompts, sankey } =
+      parseExtrasPayload(extrasJson);
 
     const cand = analysis.candidates?.[0] as
       | {
@@ -309,88 +430,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return { title: w.title ?? "", uri: w.uri };
       })
       .filter(Boolean) as { title: string; uri: string }[];
-
-    const slice = reportMarkdown.slice(0, 8000);
-
-    /** Call 2: 퀴즈 + 성찰과제 */
-    await sleep(1000);
-    const quizReflectionPrompt = `아래는 공시 분석 리포트(마크다운)입니다. 이 내용만을 근거로 JSON을 출력하세요.
-
-규칙:
-- quiz: 객관식 **정확히 4문항**. 한국어, 각 4지선다, correctIndex는 0~3 정수.
-- reflection: 서술형 **생각해볼 과제 3개**. 각각 title(짧게), prompt(구체적 질문·토론 과제). 객관식과 중복되지 않게.
-
-스키마:
-{"quiz":[{"question":"","choices":["","","",""],"correctIndex":0}],"reflection":[{"title":"","prompt":""}]}
-
-리포트:
----
-${slice}
----
-
-반드시 **JSON만** 출력(설명 문장 없음).`;
-
-    let quiz = normalizeQuizItems([]);
-    let reflectionPrompts: { title: string; prompt: string }[] = [];
-
-    try {
-      const quizRes = await generateWithRetry(ai, {
-        model,
-        contents: quizReflectionPrompt,
-        config: {
-          responseMimeType: "application/json",
-          maxOutputTokens: 4096,
-        },
-      });
-      const quizText = quizRes.text?.trim() ?? "";
-      const qrParsed = JSON.parse(
-        quizText.replace(/^```json\s*/i, "").replace(/\s*```$/i, ""),
-      ) as { quiz?: unknown; reflection?: unknown };
-      quiz = normalizeQuizItems(qrParsed.quiz);
-      reflectionPrompts = normalizeReflection(qrParsed.reflection);
-    } catch {
-      quiz = [];
-      reflectionPrompts = [];
-    }
-
-    /** Call 3: 샌키 다이어그램 */
-    await sleep(1000);
-    const sankeyPrompt = `아래는 공시 분석 리포트(마크다운)입니다. 리포트에 나온 **숫자·비중**을 활용해 매출(또는 총수입)→비용/이익으로 흐르는 샌키 다이어그램 데이터를 JSON으로 출력하세요.
-
-규칙:
-- nodes[].category: revenue(매출·수익원), profit(이익), expense(비용), neutral(합계·중간)
-- links의 source/target은 반드시 nodes[].id와 일치.
-- 숫자가 불명확하면 교육용 대표 구조로 대략적인 수치를 채우고 unit에 단위를 명시.
-
-스키마:
-{"title":"","unit":"억 원","nodes":[{"id":"","label":"","category":"revenue"}],"links":[{"source":"","target":"","value":0}]}
-
-리포트:
----
-${slice}
----
-
-반드시 **JSON만** 출력(설명 문장 없음).`;
-
-    let sankey: ReturnType<typeof normalizeSankey> = null;
-
-    try {
-      const sankeyRes = await generateWithRetry(ai, {
-        model,
-        contents: sankeyPrompt,
-        config: {
-          responseMimeType: "application/json",
-          maxOutputTokens: 2048,
-        },
-      });
-      const sankeyText = sankeyRes.text?.trim() ?? "";
-      const sankeyParsed = JSON.parse(
-        sankeyText.replace(/^```json\s*/i, "").replace(/\s*```$/i, ""),
-      ) as unknown;
-      sankey = normalizeSankey(sankeyParsed);
-    } catch {
-      sankey = null;
-    }
 
     const displayQuery =
       compareWith && compareWith !== query
