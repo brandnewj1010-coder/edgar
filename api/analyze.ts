@@ -135,6 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
+  try {
   if (req.method === "OPTIONS") {
     res.status(204).end();
     return;
@@ -279,5 +280,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: "분석 중 오류가 발생했습니다.",
       detail: message,
     });
+    return;
+  }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[analyze unhandled]", message);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: "서버에서 처리하지 못했습니다.",
+        detail: message,
+      });
+    }
   }
 }

@@ -54,10 +54,26 @@ function parseCorpXml(xml: string): DartCorp[] {
   return rows;
 }
 
+const CORP_FETCH_MS = 45_000;
+
 export async function loadCorpList(crtfc_key: string): Promise<DartCorp[]> {
   if (corpListCache && corpListCacheKey === crtfc_key) return corpListCache;
   const url = `${BASE}/corpCode.xml?crtfc_key=${encodeURIComponent(crtfc_key)}`;
-  const res = await fetch(url);
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), CORP_FETCH_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: ac.signal });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error(
+        `고유번호 목록 다운로드 시간 초과(${CORP_FETCH_MS / 1000}s). 네트워크·Vercel 함수 한도를 확인하세요.`,
+      );
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error(`고유번호 파일 다운로드 실패 (HTTP ${res.status})`);
   const buf = new Uint8Array(await res.arrayBuffer());
   let xml: string;
@@ -312,7 +328,7 @@ export function bundleToMarkdown(b: DartBundle): string {
 }
 
 /** LLM에 넣을 때 토큰 절약용 요약본 */
-export function bundleToPromptSnippet(b: DartBundle, maxChars = 14000): string {
+export function bundleToPromptSnippet(b: DartBundle, maxChars = 10000): string {
   const full = bundleToMarkdown(b);
   if (full.length <= maxChars) return full;
   return `${full.slice(0, maxChars)}\n\n…(이하 생략)…`;
