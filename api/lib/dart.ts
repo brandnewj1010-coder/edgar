@@ -188,6 +188,46 @@ async function dartGet(
   return json;
 }
 
+/** API는 전 계정을 주므로, 서버에서 학습용으로만 골라 씁니다. */
+const SJ_FOR_STUDY = new Set(["BS", "IS", "CIS", "CF"]);
+/** 자본변동표(SCE) 등은 제외 — 재무상태·손익·현금흐름 중심 */
+const MAX_FNLTT_ROWS_STUDY = 200;
+
+/** 요약 손익·재무·현금흐름에 자주 쓰는 계정 */
+const RE_CORE_ACCOUNT =
+  /매출|영업이익|법인세|당기순이익|총자산|총부채|자본총계|부채총계|유동자산|유동부채|비유동|영업활동|투자활동|재무활동|현금및현금성|이자비용|법인세비용|매출총이익|매출액/;
+/** 인건비·보수·판관비 등 직원·임원 비용 관련 */
+const RE_LABOR_ACCOUNT =
+  /급여|퇴직|임원|보수|복리후생|사외이사|스톡|주식보상|상여|퇴직급여|연금|인건비|판매비와관리비|경상연구개발|판매비|관리비/;
+
+function accountStudyScore(r: FnlttRow): number {
+  const nm = (r.account_nm || "").replace(/\s/g, "");
+  let s = 0;
+  if (RE_CORE_ACCOUNT.test(nm)) s += 4;
+  if (RE_LABOR_ACCOUNT.test(nm)) s += 3;
+  return s;
+}
+
+/**
+ * 재무상태표·손익·현금흐름만 남기고, 핵심·인건비/보수 계정을 우선해 상한까지 선택합니다.
+ */
+function filterFnlttForStudy(rows: FnlttRow[]): FnlttRow[] {
+  const only = rows.filter((r) =>
+    SJ_FOR_STUDY.has(String(r.sj_div || "").trim()),
+  );
+  if (only.length === 0) return [];
+  const scored = only.map((r, i) => ({ r, i, s: accountStudyScore(r) }));
+  scored.sort((a, b) => {
+    if (b.s !== a.s) return b.s - a.s;
+    return a.i - b.i;
+  });
+  const picked = scored
+    .slice(0, MAX_FNLTT_ROWS_STUDY)
+    .map(({ r }) => r);
+  sortFnlttRowsInPlace(picked);
+  return picked;
+}
+
 export async function fetchFnlttSinglAcntAll(
   crtfc_key: string,
   corp_code: string,
@@ -207,16 +247,17 @@ export async function fetchFnlttSinglAcntAll(
   }
   const list = r.list;
   if (!Array.isArray(list)) return [];
-  return list as FnlttRow[];
+  const arr = list as FnlttRow[];
+  return filterFnlttForStudy(arr);
 }
 
-function sortFnlttRows(rows: FnlttRow[]): FnlttRow[] {
+function sortFnlttRowsInPlace(rows: FnlttRow[]): void {
   const order = (s: string | undefined) => {
     const sj = s ?? "";
     const idx = ["BS", "IS", "CIS", "CF", "SCE"].indexOf(sj);
     return idx >= 0 ? idx : 99;
   };
-  return [...rows].sort((a, b) => {
+  rows.sort((a, b) => {
     const oa = order(a.sj_div);
     const ob = order(b.sj_div);
     if (oa !== ob) return oa - ob;
@@ -234,14 +275,15 @@ function formatAmount(s: string | undefined): string {
 export function fnlttToMarkdown(
   rows: FnlttRow[],
   title: string,
-  maxRows = 220,
+  maxRows = 120,
 ): string {
   if (!rows.length) return "";
-  const sorted = sortFnlttRows(rows);
-  const slice = sorted.slice(0, maxRows);
+  const totalInTable = rows.length;
+  sortFnlttRowsInPlace(rows);
+  const slice = rows.slice(0, maxRows);
   const more =
-    sorted.length > maxRows
-      ? `\n\n_*총 ${sorted.length}개 계정 중 상위 ${maxRows}개만 표시했습니다. 전체는 DART 원문을 보세요.*_\n`
+    totalInTable > maxRows
+      ? `\n\n_*총 ${totalInTable}개 계정 중 상위 ${maxRows}개만 표시했습니다. 전체는 DART 원문을 보세요.*_\n`
       : "";
   const lines = [
     `### ${title}`,
@@ -267,15 +309,34 @@ async function fetchOptionalList(
   const r = await dartGet(path, crtfc_key, params);
   if (r.status !== "000") return [];
   const list = r.list;
-  return Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
+  if (!Array.isArray(list)) return [];
+  const arr = list as Record<string, unknown>[];
+  return arr.length > 24 ? arr.slice(0, 24) : arr;
+}
+
+/** 임원·직원 공시 JSON에서 보수·인력 관련 열만 우선 표시 */
+const EMP_EXCTV_COL =
+  /emp|직원|급여|보수|평균|임원|퇴직|연금|사외|스톡|주식|복리|수당|인원|명|연봉|총액|남|여|계|구분|사업|기간|성명|직위|담당|소속|rcept_no|reprt_code|bsns_year/i;
+
+function pickStudyColumns(row: Record<string, unknown>): Record<string, unknown> {
+  const picked: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (EMP_EXCTV_COL.test(k)) picked[k] = v;
+  }
+  const keys = Object.keys(picked);
+  if (keys.length >= 4) return picked;
+  const fallback = Object.entries(row).slice(0, 14);
+  return Object.fromEntries(fallback);
 }
 
 function recordsToMarkdown(title: string, rows: Record<string, unknown>[]): string {
   if (!rows.length) return "";
-  const keys = Object.keys(rows[0]).filter((k) => !k.startsWith("_"));
+  const narrowed = rows.map((row) => pickStudyColumns(row));
+  const keys = Object.keys(narrowed[0] ?? {}).filter((k) => !k.startsWith("_"));
+  if (keys.length === 0) return "";
   const head = `| ${keys.join(" | ")} |`;
   const sep = `| ${keys.map(() => "---").join(" | ")} |`;
-  const body = rows.slice(0, 80).map((row) => {
+  const body = narrowed.slice(0, 20).map((row) => {
     const cells = keys.map((k) => {
       const v = row[k];
       const s =
@@ -313,23 +374,31 @@ export async function fetchDartFinancialBundle(
   let lastErr: Error | null = null;
   for (const bsns_year of yearsToTry) {
     try {
-      const [cfs, ofs] = await Promise.all([
-        fetchFnlttSinglAcntAll(crtfc_key, corp.corp_code, bsns_year, reprt_code, "CFS"),
-        fetchFnlttSinglAcntAll(crtfc_key, corp.corp_code, bsns_year, reprt_code, "OFS"),
-      ]);
+      const cfs = await fetchFnlttSinglAcntAll(
+        crtfc_key,
+        corp.corp_code,
+        bsns_year,
+        reprt_code,
+        "CFS",
+      );
+      const ofs = await fetchFnlttSinglAcntAll(
+        crtfc_key,
+        corp.corp_code,
+        bsns_year,
+        reprt_code,
+        "OFS",
+      );
       if (cfs.length > 0 || ofs.length > 0) {
-        const [exctv, emp] = await Promise.all([
-          fetchOptionalList("exctvSttus.json", crtfc_key, {
-            corp_code: corp.corp_code,
-            bsns_year,
-            reprt_code,
-          }),
-          fetchOptionalList("empSttus.json", crtfc_key, {
-            corp_code: corp.corp_code,
-            bsns_year,
-            reprt_code,
-          }),
-        ]);
+        const exctv = await fetchOptionalList("exctvSttus.json", crtfc_key, {
+          corp_code: corp.corp_code,
+          bsns_year,
+          reprt_code,
+        });
+        const emp = await fetchOptionalList("empSttus.json", crtfc_key, {
+          corp_code: corp.corp_code,
+          bsns_year,
+          reprt_code,
+        });
         return {
           corp,
           bsns_year,
@@ -355,20 +424,25 @@ export function bundleToMarkdown(b: DartBundle): string {
     `- **기업**: ${b.corp.corp_name} (종목코드 ${b.corp.stock_code}, 고유번호 ${b.corp.corp_code})`,
     `- **기준**: ${b.bsns_year}년 ${b.reprt_label} (연결=CFS / 별도=OFS)`,
     `- **출처**: 금융감독원 전자공시 오픈다트 API (fnlttSinglAcntAll, 임원·직원 현황)`,
+    `- **선별**: 재무상태표·손익·현금흐름(BS/IS/CIS/CF) 계정만 사용하고, 핵심 지표·인건비·보수 관련 계정을 우선합니다. 자본변동표 등은 생략합니다.`,
     "",
-    `> 교육용 요약입니다. 투자 판단은 원문 공시와 감사보고서를 확인하세요.`,
+    `> 교육용 요약입니다. 전체 계정·원문은 DART에서 확인하세요.`,
     "",
   ];
 
   if (b.cfs.length) {
     parts.push(
-      fnlttToMarkdown(b.cfs, "연결재무제표 (손익·재무상태표·현금흐름 등 통합)", 240),
+      fnlttToMarkdown(
+        b.cfs,
+        "연결 — 재무상태·손익·현금흐름 (학습용 선별)",
+        130,
+      ),
       "",
     );
   }
   if (b.ofs.length) {
     parts.push(
-      fnlttToMarkdown(b.ofs, "별도재무제표 (지배회사 단독)", 240),
+      fnlttToMarkdown(b.ofs, "별도 — 재무상태·손익·현금흐름 (학습용 선별)", 130),
       "",
     );
   }
@@ -383,7 +457,7 @@ export function bundleToMarkdown(b: DartBundle): string {
 }
 
 /** LLM에 넣을 때 토큰 절약용 요약본 */
-export function bundleToPromptSnippet(b: DartBundle, maxChars = 10000): string {
+export function bundleToPromptSnippet(b: DartBundle, maxChars = 7000): string {
   const full = bundleToMarkdown(b);
   if (full.length <= maxChars) return full;
   return `${full.slice(0, maxChars)}\n\n…(이하 생략)…`;
