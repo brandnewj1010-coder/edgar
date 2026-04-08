@@ -17,7 +17,23 @@ import { ReportActions } from "./components/ReportActions";
 
 function analyzeErrorExtraHint(error: string, isLocalhost: boolean): ReactNode {
   const e = error;
-  if (/503|UNAVAILABLE|high demand|overloaded/i.test(e)) {
+  /** Vercel이 HTML/텍스트로 돌려주는 경우 — OpenAI 과부하와 무관할 때가 많음 */
+  if (/FUNCTION_INVOCATION_FAILED|FUNCTION_INVOCATION_TIMEOUT/i.test(e)) {
+    return (
+      <p>
+        <strong className="text-rose-900">
+          Vercel 서버 함수가 실행 중에 종료되었습니다.
+        </strong>{" "}
+        OpenAI 과부하(503)와는 보통 다릅니다. 메모리·시간 초과·배포 오류일 수 있어요. Vercel
+        → 해당 배포 → <strong>Functions / Runtime Logs</strong>를 확인하고, 최신 커밋이
+        배포됐는지도 봐 주세요.
+      </p>
+    );
+  }
+  if (
+    /\b503\b|UNAVAILABLE|high demand|overloaded/i.test(e) &&
+    !/FUNCTION_INVOCATION/i.test(e)
+  ) {
     return (
       <p>
         <strong className="text-rose-900">AI 서비스 일시 과부하(503)일 수 있습니다.</strong>{" "}
