@@ -19,6 +19,7 @@ function normalizeAnalyzeResponse(
       ? d.reflectionPrompts
       : [],
     sankey: okSankey,
+    chartData: d?.chartData ?? null,
     groundingQueries: Array.isArray(d?.groundingQueries)
       ? d.groundingQueries
       : [],
@@ -79,6 +80,7 @@ function rowToResponse(row: DbReportRow): AnalyzeResponse {
     sources?: { title: string; uri: string }[];
     reflectionPrompts?: AnalyzeResponse["reflectionPrompts"];
     sankey?: AnalyzeResponse["sankey"];
+    chartData?: AnalyzeResponse["chartData"];
     compareWith?: string;
     fiscalYears?: number[];
   };
@@ -89,6 +91,7 @@ function rowToResponse(row: DbReportRow): AnalyzeResponse {
     quiz: Array.isArray(row.quiz) ? (row.quiz as AnalyzeResponse["quiz"]) : [],
     reflectionPrompts: meta.reflectionPrompts,
     sankey: meta.sankey as AnalyzeResponse["sankey"],
+    chartData: meta.chartData,
     groundingQueries: meta.groundingQueries,
     sources: meta.sources,
     model: typeof meta.model === "string" ? meta.model : "",
@@ -128,6 +131,7 @@ export async function saveReport(data: AnalyzeResponse): Promise<void> {
           sources: trimmed.sources,
           reflectionPrompts: trimmed.reflectionPrompts,
           sankey: trimmed.sankey,
+          chartData: trimmed.chartData,
           compareWith: trimmed.compareWith,
           fiscalYears: trimmed.fiscalYears,
         },

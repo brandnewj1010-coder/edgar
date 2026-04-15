@@ -6,6 +6,9 @@
   "functions": {
     "api/analyze.ts": {
       "maxDuration": 60
+    },
+    "api/edgar.ts": {
+      "maxDuration": 30
     }
   }
 }

@@ -4,6 +4,7 @@
  * 인증키 발급: 홈페이지 회원가입 → 인증키 신청 (무료)
  */
 import { strFromU8, unzipSync } from "fflate";
+import type { FinancialChartData, FinancialMetric, HrMetrics } from "../src/types.js";
 
 const BASE = "https://opendart.fss.or.kr/api";
 
@@ -29,7 +30,34 @@ export type FnlttRow = {
   ord?: string;
 };
 
-/** 전체 상장사를 객체 배열로 만들면 Vercel 메모리 한도(OOM)로 FUNCTION_INVOCATION_FAILED 가 납니다. XML 문자열만 캐시합니다. */
+/** ── 인메모리 캐시 (TTL: 6시간) ── */
+interface CacheEntry<T> {
+  data: T;
+  expiry: number;
+}
+const BUNDLE_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+const bundleCache = new Map<string, CacheEntry<DartBundle>>();
+
+function getBundleCacheKey(corp_code: string, bsns_year: string): string {
+  return `${corp_code}:${bsns_year}`;
+}
+
+function getCachedBundle(key: string): DartBundle | null {
+  const entry = bundleCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiry) {
+    bundleCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCachedBundle(key: string, data: DartBundle): void {
+  bundleCache.set(key, { data, expiry: Date.now() + BUNDLE_CACHE_TTL_MS });
+}
+
+/** ── 기업 목록 캐시 ── */
 let corpXmlCache: string | null = null;
 let corpXmlCacheKey = "";
 
@@ -42,33 +70,36 @@ function extractTag(block: string, tag: string): string {
 const CORP_FETCH_MS = 45_000;
 
 /**
- * corpCode.xml 전체는 수십 MB로 Vercel OOM을 유발할 수 있음.
- * 자주 쓰는 종목은 고유번호를 고정해 두고 XML 다운로드를 건너뜀 (오픈다트 공시 기준).
- * 출처: opendart 고유번호 체계와 동일한 8자리.
+ * 자주 쓰는 종목은 고유번호를 고정해 두고 XML 다운로드를 건너뜀.
  */
 const DART_CORP_BY_STOCK: Record<string, DartCorp> = {
-  "005930": {
-    corp_code: "00126380",
-    corp_name: "삼성전자",
-    stock_code: "005930",
-  },
-  "000660": {
-    corp_code: "00164779",
-    corp_name: "SK하이닉스",
-    stock_code: "000660",
-  },
+  "005930": { corp_code: "00126380", corp_name: "삼성전자", stock_code: "005930" },
+  "000660": { corp_code: "00164779", corp_name: "SK하이닉스", stock_code: "000660" },
+  "035720": { corp_code: "00104856", corp_name: "카카오", stock_code: "035720" },
+  "035420": { corp_code: "00104204", corp_name: "NAVER", stock_code: "035420" },
+  "000270": { corp_code: "00164742", corp_name: "기아", stock_code: "000270" },
+  "005380": { corp_code: "00164742", corp_name: "현대자동차", stock_code: "005380" },
+  "051910": { corp_code: "00548395", corp_name: "LG화학", stock_code: "051910" },
+  "006400": { corp_code: "00126261", corp_name: "삼성SDI", stock_code: "006400" },
+  "207940": { corp_code: "01166928", corp_name: "삼성바이오로직스", stock_code: "207940" },
+  "373220": { corp_code: "01890562", corp_name: "LG에너지솔루션", stock_code: "373220" },
 };
 
-/** 정확히 일치할 때만 XML 생략 (기업명 → 종목코드) */
 const DART_CORP_NAME_ALIAS: Record<string, string> = {
   삼성전자: "005930",
   SK하이닉스: "000660",
+  카카오: "035720",
+  NAVER: "035420",
+  네이버: "035420",
+  기아: "000270",
+  현대자동차: "005380",
+  현대차: "005380",
+  LG화학: "051910",
+  삼성SDI: "006400",
+  삼성바이오로직스: "207940",
+  LG에너지솔루션: "373220",
 };
 
-/**
- * 기업 해석: 먼저 소량 정적 매핑 → 실패 시에만 corpCode.xml.
- * 005930/삼성전자 등은 대용량 XML 없이 동작해 FUNCTION_INVOCATION_FAILED 를 줄입니다.
- */
 export async function resolveDartCorp(
   query: string,
   crtfc_key: string,
@@ -89,7 +120,6 @@ export async function resolveDartCorp(
   return findCorpInXml(q, xml);
 }
 
-/** 고유번호 CORPCODE.xml 내용(한 번만 내려받아 재사용) */
 export async function loadCorpXml(crtfc_key: string): Promise<string> {
   if (corpXmlCache && corpXmlCacheKey === crtfc_key) return corpXmlCache;
   const url = `${BASE}/corpCode.xml?crtfc_key=${encodeURIComponent(crtfc_key)}`;
@@ -128,7 +158,6 @@ export async function loadCorpXml(crtfc_key: string): Promise<string> {
   return xml;
 }
 
-/** 배열을 만들지 않고 `<list>` 블록만 순회해 기업 1건을 찾습니다. */
 export function findCorpInXml(query: string, xml: string): DartCorp | null {
   const q = query.trim();
   if (!q) return null;
@@ -188,15 +217,11 @@ async function dartGet(
   return json;
 }
 
-/** API는 전 계정을 주므로, 서버에서 학습용으로만 골라 씁니다. */
 const SJ_FOR_STUDY = new Set(["BS", "IS", "CIS", "CF"]);
-/** 자본변동표(SCE) 등은 제외 — 재무상태·손익·현금흐름 중심 */
 const MAX_FNLTT_ROWS_STUDY = 200;
 
-/** 요약 손익·재무·현금흐름에 자주 쓰는 계정 */
 const RE_CORE_ACCOUNT =
   /매출|영업이익|법인세|당기순이익|총자산|총부채|자본총계|부채총계|유동자산|유동부채|비유동|영업활동|투자활동|재무활동|현금및현금성|이자비용|법인세비용|매출총이익|매출액/;
-/** 인건비·보수·판관비 등 직원·임원 비용 관련 */
 const RE_LABOR_ACCOUNT =
   /급여|퇴직|임원|보수|복리후생|사외이사|스톡|주식보상|상여|퇴직급여|연금|인건비|판매비와관리비|경상연구개발|판매비|관리비/;
 
@@ -208,14 +233,10 @@ function accountStudyScore(r: FnlttRow): number {
   return s;
 }
 
-/**
- * 재무상태표·손익·현금흐름만 남기고, 핵심·인건비/보수 계정을 우선해 상한까지 선택합니다.
- */
 function filterFnlttForStudy(rows: FnlttRow[]): FnlttRow[] {
   const only = rows.filter((r) =>
     SJ_FOR_STUDY.has(String(r.sj_div || "").trim()),
   );
-  /** 주요계정 API는 간혹 sj_div 표기가 비어 있을 수 있음 → 전체를 대상으로 점수만 매김 */
   const base = only.length > 0 ? only : rows;
   if (base.length === 0) return [];
   const scored = base.map((r, i) => ({ r, i, s: accountStudyScore(r) }));
@@ -223,18 +244,11 @@ function filterFnlttForStudy(rows: FnlttRow[]): FnlttRow[] {
     if (b.s !== a.s) return b.s - a.s;
     return a.i - b.i;
   });
-  const picked = scored
-    .slice(0, MAX_FNLTT_ROWS_STUDY)
-    .map(({ r }) => r);
+  const picked = scored.slice(0, MAX_FNLTT_ROWS_STUDY).map(({ r }) => r);
   sortFnlttRowsInPlace(picked);
   return picked;
 }
 
-/**
- * `fnlttSinglAcntAll` 은 삼성급 기업에서 JSON이 수십 MB → `res.json()` 만으로 Vercel OOM·FUNCTION_INVOCATION_FAILED.
- * **단일회사 주요계정** API만 사용 (재무상태·손익·현금흐름 핵심 계정, 건수 작음).
- * @see https://opendart.fss.or.kr/ → 재무정보 → 단일회사 주요계정
- */
 export async function fetchFnlttSinglAcntAll(
   crtfc_key: string,
   corp_code: string,
@@ -321,7 +335,6 @@ async function fetchOptionalList(
   return arr.length > 24 ? arr.slice(0, 24) : arr;
 }
 
-/** 임원·직원 공시 JSON에서 보수·인력 관련 열만 우선 표시 */
 const EMP_EXCTV_COL =
   /emp|직원|급여|보수|평균|임원|퇴직|연금|사외|스톡|주식|복리|수당|인원|명|연봉|총액|남|여|계|구분|사업|기간|성명|직위|담당|소속|rcept_no|reprt_code|bsns_year/i;
 
@@ -366,56 +379,320 @@ export type DartBundle = {
   emp: Record<string, unknown>[];
 };
 
+/** DART 금액 문자열 → 숫자 (백만원 단위, 실패 시 null) */
+function parseAmount(s: string | undefined): number | null {
+  if (!s || s === "—" || s.trim() === "") return null;
+  const cleaned = s.replace(/[,\s]/g, "");
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? null : n;
+}
+
+/** 계정명에서 차트 카테고리 추론 */
+function inferCategory(nm: string): FinancialMetric["category"] {
+  if (/매출|Revenue|revenue/i.test(nm)) return "income";
+  if (/영업이익|당기순이익|법인세|이자비용/i.test(nm)) return "income";
+  if (/현금흐름|현금및현금성/i.test(nm)) return "cashflow";
+  if (/자산|부채|자본/i.test(nm)) return "balance";
+  if (/급여|인건비|보수|직원|임원/i.test(nm)) return "hr";
+  if (/이익률|비율|율/i.test(nm)) return "ratio";
+  return "income";
+}
+
+/** fnltt 행 배열에서 특정 계정명을 찾아 수치 반환 */
+function findAmount(rows: FnlttRow[], patterns: RegExp[]): number | null {
+  for (const pat of patterns) {
+    for (const r of rows) {
+      const nm = (r.account_nm || "").replace(/\s/g, "");
+      if (pat.test(nm)) {
+        const v = parseAmount(r.thstrm_amount);
+        if (v !== null) return v;
+      }
+    }
+  }
+  return null;
+}
+
+function findAmountTriple(
+  rows: FnlttRow[],
+  patterns: RegExp[],
+): [number | null, number | null, number | null] {
+  for (const pat of patterns) {
+    for (const r of rows) {
+      const nm = (r.account_nm || "").replace(/\s/g, "");
+      if (pat.test(nm)) {
+        return [
+          parseAmount(r.thstrm_amount),
+          parseAmount(r.frmtrm_amount),
+          parseAmount(r.bfefrmtrm_amount),
+        ];
+      }
+    }
+  }
+  return [null, null, null];
+}
+
+/**
+ * DartBundle → FinancialChartData
+ * 차트·HR KPI 계산에 필요한 구조화 데이터를 추출합니다.
+ */
+export function bundleToChartData(b: DartBundle): FinancialChartData {
+  const rows = b.cfs.length > 0 ? b.cfs : b.ofs;
+  const year = b.bsns_year;
+  const priorYear = String(parseInt(year) - 1);
+  const priorPriorYear = String(parseInt(year) - 2);
+
+  // --- 주요 손익 ---
+  const KEY_METRICS: Array<{
+    label: string;
+    patterns: RegExp[];
+    category: FinancialMetric["category"];
+    unit: string;
+  }> = [
+    {
+      label: "매출액",
+      patterns: [/^매출액$/, /^수익\(매출액\)$/, /^영업수익$/, /매출액/],
+      category: "income",
+      unit: "백만원",
+    },
+    {
+      label: "매출총이익",
+      patterns: [/^매출총이익$/, /매출총이익/],
+      category: "income",
+      unit: "백만원",
+    },
+    {
+      label: "영업이익",
+      patterns: [/^영업이익$/, /^영업이익\(손실\)$/, /^영업손익$/],
+      category: "income",
+      unit: "백만원",
+    },
+    {
+      label: "당기순이익",
+      patterns: [/^당기순이익$/, /^당기순이익\(손실\)$/, /^분기순이익$/],
+      category: "income",
+      unit: "백만원",
+    },
+    {
+      label: "영업활동현금흐름",
+      patterns: [/^영업활동.*현금흐름$/, /영업활동으로인한현금흐름/],
+      category: "cashflow",
+      unit: "백만원",
+    },
+    {
+      label: "총자산",
+      patterns: [/^자산총계$/, /^총자산$/],
+      category: "balance",
+      unit: "백만원",
+    },
+    {
+      label: "총부채",
+      patterns: [/^부채총계$/, /^총부채$/],
+      category: "balance",
+      unit: "백만원",
+    },
+    {
+      label: "자본총계",
+      patterns: [/^자본총계$/, /^자기자본$/],
+      category: "balance",
+      unit: "백만원",
+    },
+  ];
+
+  const metrics: FinancialMetric[] = KEY_METRICS.map((m) => {
+    const [c, p, pp] = findAmountTriple(rows, m.patterns);
+    return {
+      label: m.label,
+      current: c,
+      prior: p,
+      priorPrior: pp,
+      unit: m.unit,
+      category: m.category,
+    };
+  });
+
+  // --- HR 지표 ---
+  const hrMetrics = extractHrMetrics(b, metrics);
+
+  return {
+    corp: b.corp.corp_name,
+    currentYear: year,
+    priorYear,
+    priorPriorYear,
+    metrics,
+    hrMetrics,
+    unitNote: "단위: 백만원 (DART 공시 기준, 원단위 확인 필요)",
+  };
+}
+
+/** 직원·임원 현황에서 HR 지표 추출 */
+function extractHrMetrics(
+  b: DartBundle,
+  metrics: FinancialMetric[],
+): HrMetrics {
+  const hr: HrMetrics = {};
+
+  // 직원 현황에서 직원수·평균급여
+  if (b.emp.length > 0) {
+    const empRow = b.emp[0] as Record<string, unknown>;
+    // 전체 직원수: 남+여 합계 또는 총인원 필드
+    const totalField = findNumericField(empRow, [
+      "남", "여", "합계", "total", "인원수", "직원수",
+    ]);
+    if (totalField !== null) hr.headcount = totalField;
+
+    // 평균 급여
+    const salField = findNumericField(empRow, [
+      "평균급여액", "1인평균급여액", "평균연봉", "급여총액",
+    ]);
+    if (salField !== null) {
+      // DART 단위는 백만원이나 천원일 수 있음 — 값이 매우 크면 천원으로 간주
+      hr.avgSalaryMillion = salField > 100_000 ? salField / 1_000_000 : salField;
+    }
+
+    // 직원 전체 합산 시도 (여러 행 = 사업 부문별)
+    let totalHC = 0;
+    for (const row of b.emp) {
+      const r = row as Record<string, unknown>;
+      const m = parseNumericField(r, ["합계", "인원수", "남여합계"]);
+      if (m !== null) totalHC += m;
+    }
+    if (totalHC > 0 && !hr.headcount) hr.headcount = totalHC;
+  }
+
+  // 임원 현황에서 임원수·최대보수
+  if (b.exctv.length > 0) {
+    hr.execCount = b.exctv.length;
+    let maxPay = 0;
+    let totalPay = 0;
+    for (const row of b.exctv) {
+      const r = row as Record<string, unknown>;
+      const pay = parseNumericField(r, ["보수총액", "급여", "상여", "보수", "총보수"]);
+      if (pay !== null) {
+        if (pay > maxPay) maxPay = pay;
+        totalPay += pay;
+      }
+    }
+    if (maxPay > 0) hr.execMaxPayMillion = maxPay > 10_000 ? maxPay / 1_000_000 : maxPay;
+    if (totalPay > 0) hr.execTotalPayMillion = totalPay > 10_000 ? totalPay / 1_000_000 : totalPay;
+  }
+
+  // 파생 지표
+  const revMetric = metrics.find((m) => m.label === "매출액");
+  const opMetric = metrics.find((m) => m.label === "영업이익");
+  const rev = revMetric?.current ?? null;
+  const op = opMetric?.current ?? null;
+
+  if (hr.headcount && hr.headcount > 0) {
+    if (rev !== null) hr.revenuePerEmployee = Math.round(rev / hr.headcount);
+    if (op !== null) hr.opIncomePerEmployee = Math.round(op / hr.headcount);
+  }
+
+  if (hr.avgSalaryMillion && hr.headcount && rev !== null) {
+    const laborCost = hr.avgSalaryMillion * hr.headcount;
+    if (rev > 0) hr.laborToRevenueRatio = Math.round((laborCost / rev) * 100 * 10) / 10;
+  }
+
+  if (hr.execMaxPayMillion && hr.avgSalaryMillion && hr.avgSalaryMillion > 0) {
+    hr.payRatio = Math.round(hr.execMaxPayMillion / hr.avgSalaryMillion);
+  }
+
+  return hr;
+}
+
+function findNumericField(
+  row: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  for (const k of keys) {
+    for (const [rk, rv] of Object.entries(row)) {
+      if (rk.includes(k)) {
+        const n = parseNumericValue(rv);
+        if (n !== null) return n;
+      }
+    }
+  }
+  return null;
+}
+
+function parseNumericField(
+  row: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  for (const k of keys) {
+    for (const [rk, rv] of Object.entries(row)) {
+      if (rk === k || rk.includes(k)) {
+        const n = parseNumericValue(rv);
+        if (n !== null) return n;
+      }
+    }
+  }
+  return null;
+}
+
+function parseNumericValue(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const s = String(v).replace(/[,\s]/g, "");
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
 export async function fetchDartFinancialBundle(
   crtfc_key: string,
   corp: DartCorp,
 ): Promise<DartBundle> {
-  const reprt_code = "11011";
+  const reprt_code = "11011"; // 사업보고서
   const reprt_label = "사업보고서";
-  const yearsToTry: string[] = [];
+
+  // 최근 3년치만 시도 (y-1, y-2, y-3)
   const y = new Date().getFullYear();
-  for (let i = 1; i <= 4; i++) {
-    yearsToTry.push(String(y - i));
-  }
+  const yearsToTry = [y - 1, y - 2, y - 3].map(String);
 
   let lastErr: Error | null = null;
   for (const bsns_year of yearsToTry) {
+    // 캐시 확인
+    const cacheKey = getBundleCacheKey(corp.corp_code, bsns_year);
+    const cached = getCachedBundle(cacheKey);
+    if (cached) return cached;
+
     try {
-      const cfs = await fetchFnlttSinglAcntAll(
-        crtfc_key,
-        corp.corp_code,
-        bsns_year,
-        reprt_code,
-        "CFS",
-      );
-      const ofs = await fetchFnlttSinglAcntAll(
-        crtfc_key,
-        corp.corp_code,
-        bsns_year,
-        reprt_code,
-        "OFS",
-      );
+      // CFS + OFS 병렬 호출
+      const [cfsResult, ofsResult] = await Promise.allSettled([
+        fetchFnlttSinglAcntAll(crtfc_key, corp.corp_code, bsns_year, reprt_code, "CFS"),
+        fetchFnlttSinglAcntAll(crtfc_key, corp.corp_code, bsns_year, reprt_code, "OFS"),
+      ]);
+
+      const cfs = cfsResult.status === "fulfilled" ? cfsResult.value : [];
+      const ofs = ofsResult.status === "fulfilled" ? ofsResult.value : [];
+
       if (cfs.length > 0 || ofs.length > 0) {
-        const exctv = await fetchOptionalList("exctvSttus.json", crtfc_key, {
-          corp_code: corp.corp_code,
-          bsns_year,
-          reprt_code,
-        });
-        const emp = await fetchOptionalList("empSttus.json", crtfc_key, {
-          corp_code: corp.corp_code,
-          bsns_year,
-          reprt_code,
-        });
-        return {
+        // 임원·직원 현황도 병렬 호출
+        const [exctvResult, empResult] = await Promise.allSettled([
+          fetchOptionalList("exctvSttus.json", crtfc_key, {
+            corp_code: corp.corp_code,
+            bsns_year,
+            reprt_code,
+          }),
+          fetchOptionalList("empSttus.json", crtfc_key, {
+            corp_code: corp.corp_code,
+            bsns_year,
+            reprt_code,
+          }),
+        ]);
+
+        const bundle: DartBundle = {
           corp,
           bsns_year,
           reprt_code,
           reprt_label,
           cfs,
           ofs,
-          exctv,
-          emp,
+          exctv: exctvResult.status === "fulfilled" ? exctvResult.value : [],
+          emp: empResult.status === "fulfilled" ? empResult.value : [],
         };
+
+        // 캐시 저장
+        setCachedBundle(cacheKey, bundle);
+        return bundle;
       }
     } catch (e) {
       lastErr = e instanceof Error ? e : new Error(String(e));
@@ -430,8 +707,8 @@ export function bundleToMarkdown(b: DartBundle): string {
     "",
     `- **기업**: ${b.corp.corp_name} (종목코드 ${b.corp.stock_code}, 고유번호 ${b.corp.corp_code})`,
     `- **기준**: ${b.bsns_year}년 ${b.reprt_label} (연결=CFS / 별도=OFS)`,
-    `- **출처**: 금융감독원 오픈다트 **단일회사 주요계정**(fnlttSinglAcnt), 임원·직원 현황`,
-    `- **선별**: 재무상태표·손익·현금흐름(BS/IS/CIS/CF) 계정만 사용하고, 핵심 지표·인건비·보수 관련 계정을 우선합니다. 자본변동표 등은 생략합니다.`,
+    `- **출처**: 금융감독원 오픈다트 단일회사 주요계정(fnlttSinglAcnt), 임원·직원 현황`,
+    `- **선별**: 재무상태표·손익·현금흐름(BS/IS/CIS/CF) 계정만, 핵심·인건비 관련 우선. 3년치 표시.`,
     "",
     `> 교육용 요약입니다. 전체 계정·원문은 DART에서 확인하세요.`,
     "",
@@ -439,11 +716,7 @@ export function bundleToMarkdown(b: DartBundle): string {
 
   if (b.cfs.length) {
     parts.push(
-      fnlttToMarkdown(
-        b.cfs,
-        "연결 — 재무상태·손익·현금흐름 (학습용 선별)",
-        130,
-      ),
+      fnlttToMarkdown(b.cfs, "연결 — 재무상태·손익·현금흐름 (학습용 선별)", 130),
       "",
     );
   }
@@ -463,7 +736,6 @@ export function bundleToMarkdown(b: DartBundle): string {
   return parts.join("\n");
 }
 
-/** LLM에 넣을 때 토큰 절약용 요약본 */
 export function bundleToPromptSnippet(b: DartBundle, maxChars = 7000): string {
   const full = bundleToMarkdown(b);
   if (full.length <= maxChars) return full;
