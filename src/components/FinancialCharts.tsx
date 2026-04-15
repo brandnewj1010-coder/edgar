@@ -19,32 +19,49 @@ interface Props {
 }
 
 // ── 수치 포맷 헬퍼 ────────────────────────────────────────────────────────────
+
+/**
+ * DART 단위 자동 감지: 10^10 초과면 원 단위 → 백만원으로 변환
+ * (fnlttSinglAcnt는 백만원이 기본, 일부 회사·API는 원 단위)
+ */
+function normalizeToBaegmanwon(v: number): number {
+  return Math.abs(v) > 10_000_000_000 ? v / 1_000_000 : v;
+}
+
 function fmtVal(v: number | null, unit: string): string {
   if (v === null || v === undefined) return "—";
   if (unit === "USD") {
-    if (Math.abs(v) >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
-    if (Math.abs(v) >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+    const abs = Math.abs(v);
+    if (abs >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
+    if (abs >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
     return `$${v.toLocaleString()}`;
   }
-  if (unit === "명") return `${v.toLocaleString()}명`;
+  if (unit === "명") return `${Math.round(v).toLocaleString()}명`;
   if (unit === "%") return `${v.toFixed(1)}%`;
-  // 백만원 기준
-  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}조`;
-  if (Math.abs(v) >= 10_000) return `${(v / 10_000).toFixed(0)}억`;
-  if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(1)}십억`;
-  return `${v.toLocaleString()}백만`;
+
+  // 백만원 기준 (원 단위 혼입 자동 보정)
+  const n = normalizeToBaegmanwon(v);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "−" : "";
+  if (abs >= 1_000_000) return `${sign}${(Math.abs(n) / 1_000_000).toFixed(1)}조`;
+  if (abs >= 10_000)    return `${sign}${Math.round(Math.abs(n) / 10_000).toLocaleString()}억`;
+  if (abs >= 1)         return `${sign}${Math.round(Math.abs(n)).toLocaleString()}백만`;
+  return `${n.toLocaleString()}백만`;
 }
 
 function formatYAxis(v: number, unit: string): string {
   if (unit === "USD") {
-    if (Math.abs(v) >= 1e9) return `$${(v / 1e9).toFixed(0)}B`;
-    if (Math.abs(v) >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
+    const abs = Math.abs(v);
+    if (abs >= 1e9) return `$${(v / 1e9).toFixed(0)}B`;
+    if (abs >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
     return `$${v}`;
   }
-  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(0)}조`;
-  if (Math.abs(v) >= 10_000) return `${(v / 10_000).toFixed(0)}억`;
-  if (Math.abs(v) >= 1_000) return `${(v / 1_000).toFixed(0)}십억`;
-  return String(v);
+  const n = normalizeToBaegmanwon(v);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "−" : "";
+  if (abs >= 1_000_000) return `${sign}${(Math.abs(n) / 1_000_000).toFixed(0)}조`;
+  if (abs >= 10_000)    return `${sign}${Math.round(Math.abs(n) / 10_000).toLocaleString()}억`;
+  return `${sign}${Math.round(Math.abs(n)).toLocaleString()}백만`;
 }
 
 const COLORS = {

@@ -288,9 +288,32 @@ function sortFnlttRowsInPlace(rows: FnlttRow[]): void {
   });
 }
 
-function formatAmount(s: string | undefined): string {
+/**
+ * DART 금액 문자열 → 한국어 단위 변환
+ * - 대부분 백만원 단위로 옴
+ * - 10^10 초과 시 원 단위로 판단하여 1/1,000,000 변환
+ */
+function formatAmountKorean(s: string | undefined): string {
   if (s == null || s === "") return "—";
-  return String(s).trim();
+  const str = String(s).trim();
+  if (!str || str === "—") return "—";
+  const cleaned = str.replace(/[,\s]/g, "");
+  const raw = parseFloat(cleaned);
+  if (isNaN(raw)) return str;
+  if (raw === 0) return "0";
+
+  const sign = raw < 0 ? "−" : "";
+  let v = Math.abs(raw);
+
+  // 원 단위 자동 감지: 10^10(= 100억 백만원=100조) 초과면 원→백만원 변환
+  if (v > 10_000_000_000) {
+    v = v / 1_000_000;
+  }
+
+  if (v >= 1_000_000) return `${sign}${(v / 1_000_000).toFixed(1)}조`;
+  if (v >= 10_000)    return `${sign}${Math.round(v / 10_000).toLocaleString()}억`;
+  if (v >= 1)         return `${sign}${Math.round(v).toLocaleString()}백만`;
+  return str;
 }
 
 export function fnlttToMarkdown(
@@ -304,19 +327,21 @@ export function fnlttToMarkdown(
   const slice = rows.slice(0, maxRows);
   const more =
     totalInTable > maxRows
-      ? `\n\n_*총 ${totalInTable}개 계정 중 상위 ${maxRows}개만 표시했습니다. 전체는 DART 원문을 보세요.*_\n`
+      ? `\n\n_*총 ${totalInTable}개 계정 중 상위 ${maxRows}개만 표시. 전체는 DART 원문을 보세요.*_\n`
       : "";
   const lines = [
     `### ${title}`,
     "",
-    "| 재무제표 | 계정과목 | 당기 | 전기 | 전전기 |",
-    "| --- | --- | --- | --- | --- |",
+    "> 단위: 백만원 (조/억 단위로 표시, DART 공시 원문 기준)",
+    "",
+    "| 구분 | 계정과목 | 당기 | 전기 | 전전기 |",
+    "| --- | --- | ---: | ---: | ---: |",
   ];
   for (const r of slice) {
     const sj = (r.sj_nm || r.sj_div || "").replace(/\|/g, "/");
     const nm = (r.account_nm || "").replace(/\|/g, "/");
     lines.push(
-      `| ${sj} | ${nm} | ${formatAmount(r.thstrm_amount)} | ${formatAmount(r.frmtrm_amount)} | ${formatAmount(r.bfefrmtrm_amount)} |`,
+      `| ${sj} | ${nm} | ${formatAmountKorean(r.thstrm_amount)} | ${formatAmountKorean(r.frmtrm_amount)} | ${formatAmountKorean(r.bfefrmtrm_amount)} |`,
     );
   }
   return lines.join("\n") + more;
@@ -335,37 +360,86 @@ async function fetchOptionalList(
   return arr.length > 24 ? arr.slice(0, 24) : arr;
 }
 
-const EMP_EXCTV_COL =
-  /emp|직원|급여|보수|평균|임원|퇴직|연금|사외|스톡|주식|복리|수당|인원|명|연봉|총액|남|여|계|구분|사업|기간|성명|직위|담당|소속|rcept_no|reprt_code|bsns_year/i;
-
-function pickStudyColumns(row: Record<string, unknown>): Record<string, unknown> {
-  const picked: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(row)) {
-    if (EMP_EXCTV_COL.test(k)) picked[k] = v;
-  }
-  const keys = Object.keys(picked);
-  if (keys.length >= 4) return picked;
-  const fallback = Object.entries(row).slice(0, 14);
-  return Object.fromEntries(fallback);
-}
-
-function recordsToMarkdown(title: string, rows: Record<string, unknown>[]): string {
+/** 임원 현황 (exctvSttus) → 깔끔한 마크다운 표 */
+function exctvToMarkdown(rows: Record<string, unknown>[]): string {
   if (!rows.length) return "";
-  const narrowed = rows.map((row) => pickStudyColumns(row));
-  const keys = Object.keys(narrowed[0] ?? {}).filter((k) => !k.startsWith("_"));
-  if (keys.length === 0) return "";
-  const head = `| ${keys.join(" | ")} |`;
-  const sep = `| ${keys.map(() => "---").join(" | ")} |`;
-  const body = narrowed.slice(0, 20).map((row) => {
-    const cells = keys.map((k) => {
-      const v = row[k];
-      const s =
-        v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
-      return s.replace(/\|/g, "/").slice(0, 200);
+  // DART exctvSttus 주요 필드 순서
+  const COLS: Array<{ key: string; label: string }> = [
+    { key: "main_job_nm", label: "직명" },
+    { key: "kor_nm",      label: "성명" },
+    { key: "ofcps",       label: "직위" },
+    { key: "act_sttus",   label: "상근구분" },
+    { key: "sexdstn",     label: "성별" },
+    { key: "tenure_end_dt", label: "임기만료" },
+    { key: "tenure_end",  label: "임기만료" },
+  ];
+
+  // 실제 데이터에 있는 컬럼만 선택
+  const firstRow = rows[0] as Record<string, unknown>;
+  const usedCols = COLS.filter(
+    (c) => firstRow[c.key] != null && String(firstRow[c.key]).trim() !== "",
+  );
+  // 없으면 아무 컬럼이나 8개까지
+  const finalCols = usedCols.length >= 2
+    ? usedCols
+    : Object.keys(firstRow)
+        .filter((k) => !["rcept_no", "reprt_code", "corp_code", "corp_name", "bsns_year"].includes(k))
+        .slice(0, 8)
+        .map((k) => ({ key: k, label: k }));
+
+  const head = `| ${finalCols.map((c) => c.label).join(" | ")} |`;
+  const sep  = `| ${finalCols.map(() => "---").join(" | ")} |`;
+  const body = rows.slice(0, 20).map((row) => {
+    const r = row as Record<string, unknown>;
+    const cells = finalCols.map((c) => {
+      const v = r[c.key];
+      return v == null ? "" : String(v).replace(/\|/g, "/").slice(0, 60);
     });
     return `| ${cells.join(" | ")} |`;
   });
-  return [`### ${title}`, "", head, sep, ...body, ""].join("\n");
+  return ["### 임원 현황 (사업보고서 기준)", "", head, sep, ...body, ""].join("\n");
+}
+
+/** 직원 현황 (empSttus) → 깔끔한 마크다운 표 */
+function empToMarkdown(rows: Record<string, unknown>[]): string {
+  if (!rows.length) return "";
+  const COLS: Array<{ key: string; label: string }> = [
+    { key: "fo_bbm",                  label: "사업부문" },
+    { key: "sexdstn",                 label: "성별" },
+    { key: "empCntCo",               label: "직원수" },
+    { key: "sfml_lbr_co_cnt",         label: "정규직" },
+    { key: "tmp_lbr_co_cnt",          label: "계약직" },
+    { key: "avg_bsns_term",           label: "평균근속(년)" },
+    { key: "annlsal_ttlamnt",         label: "급여합계(백만원)" },
+    { key: "of_avrg_annual_salary",   label: "1인평균급여(백만원)" },
+  ];
+
+  const firstRow = rows[0] as Record<string, unknown>;
+  const usedCols = COLS.filter((c) => firstRow[c.key] != null);
+  const finalCols = usedCols.length >= 2
+    ? usedCols
+    : Object.keys(firstRow)
+        .filter((k) => !["rcept_no", "reprt_code", "corp_code", "corp_name", "bsns_year"].includes(k))
+        .slice(0, 8)
+        .map((k) => ({ key: k, label: k }));
+
+  const head = `| ${finalCols.map((c) => c.label).join(" | ")} |`;
+  const sep  = `| ${finalCols.map(() => "---").join(" | ")} |`;
+  const body = rows.slice(0, 20).map((row) => {
+    const r = row as Record<string, unknown>;
+    const cells = finalCols.map((c) => {
+      const v = r[c.key];
+      if (v == null) return "";
+      // 금액 필드 자동 포맷
+      if (c.key === "annlsal_ttlamnt" || c.key === "of_avrg_annual_salary") {
+        const n = parseFloat(String(v).replace(/[,\s]/g, ""));
+        if (!isNaN(n)) return formatAmountKorean(String(v));
+      }
+      return String(v).replace(/\|/g, "/").slice(0, 60);
+    });
+    return `| ${cells.join(" | ")} |`;
+  });
+  return ["### 직원 현황 (사업보고서 기준)", "", head, sep, ...body, ""].join("\n");
 }
 
 export type DartBundle = {
@@ -524,117 +598,139 @@ export function bundleToChartData(b: DartBundle): FinancialChartData {
   };
 }
 
-/** 직원·임원 현황에서 HR 지표 추출 */
+/**
+ * DART 수치 자동 스케일: 원 단위가 섞일 경우 백만원으로 정규화
+ * fnlttSinglAcnt는 보통 백만원, empSttus 급여는 백만원 또는 원
+ */
+function normalizeToMillion(v: number): number {
+  // 10^9(= 10억 백만원 = 10경원)를 넘으면 원 단위 → 백만원
+  return v > 1_000_000_000 ? v / 1_000_000 : v;
+}
+
+/** 직원·임원 현황에서 HR 지표 추출 (DART empSttus / exctvSttus 필드 기준) */
 function extractHrMetrics(
   b: DartBundle,
   metrics: FinancialMetric[],
 ): HrMetrics {
   const hr: HrMetrics = {};
 
-  // 직원 현황에서 직원수·평균급여
+  // ── 직원 현황 (empSttus) ─────────────────────────────────────────────────
   if (b.emp.length > 0) {
-    const empRow = b.emp[0] as Record<string, unknown>;
-    // 전체 직원수: 남+여 합계 또는 총인원 필드
-    const totalField = findNumericField(empRow, [
-      "남", "여", "합계", "total", "인원수", "직원수",
-    ]);
-    if (totalField !== null) hr.headcount = totalField;
+    // 성별 합계 행 우선 (sexdstn === '합계' or '전체')
+    const empRows = b.emp as Record<string, unknown>[];
+    const totalRow = empRows.find(
+      (r) => /합계|전체/i.test(String(r["sexdstn"] ?? "")),
+    ) ?? empRows[0];
 
-    // 평균 급여
-    const salField = findNumericField(empRow, [
-      "평균급여액", "1인평균급여액", "평균연봉", "급여총액",
-    ]);
-    if (salField !== null) {
-      // DART 단위는 백만원이나 천원일 수 있음 — 값이 매우 크면 천원으로 간주
-      hr.avgSalaryMillion = salField > 100_000 ? salField / 1_000_000 : salField;
+    // 직원수: empCntCo → sfml_lbr_co_cnt + tmp_lbr_co_cnt 합산
+    const hc =
+      pNum(totalRow["empCntCo"]) ??
+      addNulls(pNum(totalRow["sfml_lbr_co_cnt"]), pNum(totalRow["tmp_lbr_co_cnt"]));
+    if (hc !== null && hc > 0) hr.headcount = hc;
+
+    // 직원수 — 성별별 행이 여러 개인 경우 합산
+    if (!hr.headcount) {
+      let sum = 0;
+      for (const row of empRows) {
+        const n = pNum(row["empCntCo"]);
+        if (n !== null) sum += n;
+      }
+      if (sum > 0) hr.headcount = sum;
     }
 
-    // 직원 전체 합산 시도 (여러 행 = 사업 부문별)
-    let totalHC = 0;
-    for (const row of b.emp) {
-      const r = row as Record<string, unknown>;
-      const m = parseNumericField(r, ["합계", "인원수", "남여합계"]);
-      if (m !== null) totalHC += m;
+    // 1인 평균 급여 (백만원) — of_avrg_annual_salary 우선
+    const avgSalRaw =
+      pNum(totalRow["of_avrg_annual_salary"]) ??
+      pNum(totalRow["avrg_annual_salary"]);
+    if (avgSalRaw !== null && avgSalRaw > 0) {
+      hr.avgSalaryMillion = normalizeToMillion(avgSalRaw);
     }
-    if (totalHC > 0 && !hr.headcount) hr.headcount = totalHC;
-  }
 
-  // 임원 현황에서 임원수·최대보수
-  if (b.exctv.length > 0) {
-    hr.execCount = b.exctv.length;
-    let maxPay = 0;
-    let totalPay = 0;
-    for (const row of b.exctv) {
-      const r = row as Record<string, unknown>;
-      const pay = parseNumericField(r, ["보수총액", "급여", "상여", "보수", "총보수"]);
-      if (pay !== null) {
-        if (pay > maxPay) maxPay = pay;
-        totalPay += pay;
+    // 평균 급여가 없으면 급여합계 / 직원수로 계산
+    if (!hr.avgSalaryMillion && hr.headcount && hr.headcount > 0) {
+      const ttl = pNum(totalRow["annlsal_ttlamnt"]);
+      if (ttl !== null && ttl > 0) {
+        hr.avgSalaryMillion = normalizeToMillion(ttl) / hr.headcount;
       }
     }
-    if (maxPay > 0) hr.execMaxPayMillion = maxPay > 10_000 ? maxPay / 1_000_000 : maxPay;
-    if (totalPay > 0) hr.execTotalPayMillion = totalPay > 10_000 ? totalPay / 1_000_000 : totalPay;
   }
 
-  // 파생 지표
+  // ── 임원 현황 (exctvSttus) — 보수 정보 없음, 등기임원 수만 ──────────────
+  if (b.exctv.length > 0) {
+    const exctvRows = b.exctv as Record<string, unknown>[];
+    // 등기임원 수 (비상근 사외이사 포함)
+    hr.execCount = exctvRows.length;
+    // 등기임원만 카운트 (rglytn_at === 'Y')
+    const registered = exctvRows.filter(
+      (r) => String(r["rglytn_at"] ?? "").toUpperCase() === "Y",
+    );
+    if (registered.length > 0) hr.execCount = registered.length;
+  }
+
+  // ── fnlttSinglAcnt에서 임원보수 집계 찾기 ─────────────────────────────────
+  const allRows = [...b.cfs, ...b.ofs];
+  const execPayRaw = findAmountByAccount(allRows, [
+    /^임원보수$/, /^임원급여$/, /^임원에대한급여$/, /임원보수/,
+  ]);
+  if (execPayRaw !== null && hr.execCount && hr.execCount > 0) {
+    // fnltt는 백만원 단위이므로 normalizeToMillion 불필요 (이미 백만원)
+    hr.execTotalPayMillion = execPayRaw;
+    hr.execMaxPayMillion = execPayRaw / hr.execCount; // 1인 평균 (최대값 근사)
+  }
+
+  // ── 파생 지표 계산 ─────────────────────────────────────────────────────────
   const revMetric = metrics.find((m) => m.label === "매출액");
-  const opMetric = metrics.find((m) => m.label === "영업이익");
+  const opMetric  = metrics.find((m) => m.label === "영업이익");
   const rev = revMetric?.current ?? null;
-  const op = opMetric?.current ?? null;
+  const op  = opMetric?.current ?? null;
 
   if (hr.headcount && hr.headcount > 0) {
-    if (rev !== null) hr.revenuePerEmployee = Math.round(rev / hr.headcount);
-    if (op !== null) hr.opIncomePerEmployee = Math.round(op / hr.headcount);
+    if (rev !== null && rev > 0) hr.revenuePerEmployee    = Math.round(rev / hr.headcount);
+    if (op  !== null)             hr.opIncomePerEmployee  = Math.round(op  / hr.headcount);
   }
 
-  if (hr.avgSalaryMillion && hr.headcount && rev !== null) {
+  if (hr.avgSalaryMillion && hr.avgSalaryMillion > 0 && hr.headcount) {
     const laborCost = hr.avgSalaryMillion * hr.headcount;
-    if (rev > 0) hr.laborToRevenueRatio = Math.round((laborCost / rev) * 100 * 10) / 10;
+    if (rev !== null && rev > 0) {
+      hr.laborToRevenueRatio = Math.round((laborCost / rev) * 1000) / 10;
+    }
   }
 
+  // Pay Ratio: 임원 평균보수 / 직원 평균급여
   if (hr.execMaxPayMillion && hr.avgSalaryMillion && hr.avgSalaryMillion > 0) {
-    hr.payRatio = Math.round(hr.execMaxPayMillion / hr.avgSalaryMillion);
+    hr.payRatio = Math.round((hr.execMaxPayMillion / hr.avgSalaryMillion) * 10) / 10;
   }
 
   return hr;
 }
 
-function findNumericField(
-  row: Record<string, unknown>,
-  keys: string[],
-): number | null {
-  for (const k of keys) {
-    for (const [rk, rv] of Object.entries(row)) {
-      if (rk.includes(k)) {
-        const n = parseNumericValue(rv);
-        if (n !== null) return n;
-      }
-    }
-  }
-  return null;
-}
-
-function parseNumericField(
-  row: Record<string, unknown>,
-  keys: string[],
-): number | null {
-  for (const k of keys) {
-    for (const [rk, rv] of Object.entries(row)) {
-      if (rk === k || rk.includes(k)) {
-        const n = parseNumericValue(rv);
-        if (n !== null) return n;
-      }
-    }
-  }
-  return null;
-}
-
-function parseNumericValue(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const s = String(v).replace(/[,\s]/g, "");
-  const n = parseFloat(s);
+/** pNum: unknown → number | null */
+function pNum(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = parseFloat(String(v).replace(/[,\s]/g, ""));
   return isNaN(n) ? null : n;
 }
+
+/** null-safe 덧셈 */
+function addNulls(a: number | null, b: number | null): number | null {
+  if (a === null && b === null) return null;
+  return (a ?? 0) + (b ?? 0);
+}
+
+/** fnltt 행에서 계정명 패턴으로 당기 금액 찾기 */
+function findAmountByAccount(rows: FnlttRow[], patterns: RegExp[]): number | null {
+  for (const pat of patterns) {
+    for (const r of rows) {
+      const nm = (r.account_nm || "").replace(/\s/g, "");
+      if (pat.test(nm)) {
+        const v = parseAmount(r.thstrm_amount);
+        if (v !== null) return v;
+      }
+    }
+  }
+  return null;
+}
+
 
 export async function fetchDartFinancialBundle(
   crtfc_key: string,
@@ -727,10 +823,10 @@ export function bundleToMarkdown(b: DartBundle): string {
     );
   }
   if (b.exctv.length) {
-    parts.push(recordsToMarkdown("임원 현황·보수 등 공시 (사업보고서)", b.exctv));
+    parts.push(exctvToMarkdown(b.exctv));
   }
   if (b.emp.length) {
-    parts.push(recordsToMarkdown("직원 현황·급여 등 공시 (사업보고서)", b.emp));
+    parts.push(empToMarkdown(b.emp));
   }
 
   return parts.join("\n");
