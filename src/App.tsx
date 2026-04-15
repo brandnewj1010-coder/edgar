@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { FileText, Loader2, Sparkles, BookOpen, BarChart3 } from "lucide-react";
+import { FileText, Loader2, Sparkles, BookOpen, BarChart3, NotebookText } from "lucide-react";
 import { MarkdownReport } from "./components/MarkdownReport";
 import { LearningSide } from "./components/LearningSide";
 import { Sidebar } from "./components/Sidebar";
@@ -17,7 +17,7 @@ import type { AnalyzeResponse, DisclosureSource, QuizItem } from "./types";
 import { ReportDocument } from "./components/ReportDocument";
 import { ReportActions } from "./components/ReportActions";
 
-type PageView = "report" | "study";
+type PageView = "report" | "notes" | "study";
 
 function analyzeErrorExtraHint(error: string, isLocalhost: boolean): ReactNode {
   const e = error;
@@ -78,6 +78,8 @@ export default function App() {
   const [demoMode, setDemoMode] = useState(
     () => import.meta.env.VITE_USE_DEMO === "1",
   );
+  // 해설노트 탭 — 새 결과가 왔는데 아직 안 봤을 때 뱃지
+  const [notesSeen, setNotesSeen] = useState(true);
   // 스터디 페이지로 넘길 퀴즈
   const [pendingQuiz, setPendingQuiz] = useState<{
     source: DisclosureSource;
@@ -97,6 +99,7 @@ export default function App() {
     try {
       const data = await requestAnalyze(source, q, { demo: demoMode });
       setResult(data);
+      setNotesSeen(false); // 새 결과 → 해설노트 탭에 뱃지
       await saveReport(data);
       setRecent(await loadRecentList());
 
@@ -132,6 +135,7 @@ export default function App() {
       const full = await loadReportById(r.id);
       if (full) {
         setResult(full);
+        setNotesSeen(false);
         setPage("report");
       } else {
         setResult(null);
@@ -149,7 +153,7 @@ export default function App() {
   return (
     <div className="flex min-h-screen flex-col bg-[#eceff5] md:flex-row">
       {/* 사이드바 (리포트 페이지에서만 표시) */}
-      {page === "report" && (
+      {(page === "report" || page === "notes") && (
         <Sidebar
           source={source}
           onSource={setSource}
@@ -202,6 +206,22 @@ export default function App() {
               리포트
             </button>
             <button
+              onClick={() => { setPage("notes"); setNotesSeen(true); }}
+              className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                page === "notes"
+                  ? "bg-white text-slate-800 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <NotebookText className="h-3.5 w-3.5" />
+              해설노트
+              {!notesSeen && result && page !== "notes" && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-emerald-500">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setPage("study")}
               className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                 page === "study"
@@ -250,7 +270,7 @@ export default function App() {
                 <p className="mt-2 text-sm leading-relaxed text-slate-500">
                   <span className="font-medium text-slate-700">DART</span> 또는{" "}
                   <span className="font-medium text-slate-700">EDGAR</span>를 고르고 기업·티커를
-                  넣은 뒤 검색하세요. 본문 속 용어에 마우스를 올리면 설명이 뜹니다.
+                  넣은 뒤 검색하세요.
                 </p>
                 <p className="mt-3 text-xs text-slate-400">
                   EDGAR 예: AAPL, MSFT, TSLA | DART 예: 삼성전자, 005930
@@ -263,9 +283,7 @@ export default function App() {
               <div className="mx-auto flex max-w-md flex-col items-center justify-center gap-5 py-20">
                 <Loader2 className="h-11 w-11 animate-spin text-indigo-500" strokeWidth={2} />
                 <div className="text-center">
-                  <p className="text-sm font-medium text-slate-800">
-                    공시 데이터 분석 중이에요
-                  </p>
+                  <p className="text-sm font-medium text-slate-800">공시 데이터 분석 중이에요</p>
                   <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
                     DART/EDGAR 데이터 수집 + AI 해설 + 퀴즈 생성까지 약 15~45초 소요됩니다.
                   </p>
@@ -273,54 +291,82 @@ export default function App() {
               </div>
             )}
 
-            {/* 리포트 */}
-            {result && !loading && (
-              <div
-                className={`mx-auto max-w-3xl transition-opacity duration-200 ${restoring ? "pointer-events-none opacity-60" : "opacity-100"}`}
-              >
+            {/* 리포트 탭: 차트 + HR KPI */}
+            {result && !loading && page === "report" && (
+              <div className={`mx-auto max-w-3xl transition-opacity duration-200 ${restoring ? "pointer-events-none opacity-60" : "opacity-100"}`}>
                 {restoring && (
-                  <p className="mb-3 text-center text-xs font-medium text-indigo-600">
-                    불러오는 중…
-                  </p>
+                  <p className="mb-3 text-center text-xs font-medium text-indigo-600">불러오는 중…</p>
                 )}
 
-                {/* 제목 영역 */}
-                <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-                  <div className="min-w-0 space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
-                        {result.source === "dart" ? "DART" : "EDGAR"}
-                      </span>
-                      {result.model === "demo" && (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-                          데모
-                        </span>
-                      )}
-                      {result.quiz && result.quiz.length > 0 && (
-                        <button
-                          onClick={() => setPage("study")}
-                          className="flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-200"
-                        >
-                          <BookOpen className="h-3 w-3" />
-                          퀴즈 {result.quiz.length}문제 생성됨 →
-                        </button>
-                      )}
-                    </div>
-                    <h2 className="truncate text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">
-                      {result.query}
-                    </h2>
+                {/* 기업명 + 배지 */}
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
+                    {result.source === "dart" ? "DART" : "EDGAR"}
+                  </span>
+                  {result.model === "demo" && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">데모</span>
+                  )}
+                  <h2 className="text-xl font-semibold tracking-tight text-slate-900">
+                    {result.query}
+                  </h2>
+                </div>
+
+                {/* 해설노트 이동 유도 */}
+                <div className="mb-4 flex gap-2">
+                  <button
+                    onClick={() => { setPage("notes"); setNotesSeen(true); }}
+                    className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                  >
+                    <NotebookText className="h-3.5 w-3.5" />
+                    AI 해설노트 보기
+                  </button>
+                  {result.quiz && result.quiz.length > 0 && (
+                    <button
+                      onClick={() => setPage("study")}
+                      className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
+                      퀴즈 {result.quiz.length}문제 풀기
+                    </button>
+                  )}
+                </div>
+
+                {/* 차트 */}
+                {result.chartData ? (
+                  <FinancialCharts chartData={result.chartData} />
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 px-6 py-12 text-center text-sm text-slate-400">
+                    구조화된 재무 데이터가 없습니다. 해설노트에서 AI 분석을 확인하세요.
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* 해설노트 탭: AI 마크다운 */}
+            {result && !loading && page === "notes" && (
+              <div className={`mx-auto max-w-3xl transition-opacity duration-200 ${restoring ? "pointer-events-none opacity-60" : "opacity-100"}`}>
+                {restoring && (
+                  <p className="mb-3 text-center text-xs font-medium text-indigo-600">불러오는 중…</p>
+                )}
+
+                <div className="mb-4 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
+                    {result.source === "dart" ? "DART" : "EDGAR"}
+                  </span>
+                  {result.model === "demo" && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">데모</span>
+                  )}
+                  {result.model && result.model !== "demo" && (
+                    <span className="font-mono text-xs text-slate-400">{result.model}</span>
+                  )}
+                  <h2 className="text-xl font-semibold tracking-tight text-slate-900">
+                    {result.query}
+                  </h2>
                 </div>
 
                 <ReportActions reportMarkdown={result.reportMarkdown} />
 
-                {/* 차트 (chartData가 있을 때) */}
-                {result.chartData && (
-                  <FinancialCharts chartData={result.chartData} />
-                )}
-
-                {/* 리포트 본문 */}
-                <div className="mt-6">
+                <div className="mt-4">
                   <ReportDocument>
                     <MarkdownReport markdown={result.reportMarkdown} />
                   </ReportDocument>
@@ -331,8 +377,8 @@ export default function App() {
         )}
       </main>
 
-      {/* 학습 사이드바 (리포트 페이지에서만) */}
-      {page === "report" && (
+      {/* 학습 사이드바 (해설노트 탭에서만) */}
+      {page === "notes" && (
         <>
           <aside className="no-print hidden w-[min(100%,22rem)] shrink-0 overflow-hidden bg-ink-50 lg:block">
             <LearningSide

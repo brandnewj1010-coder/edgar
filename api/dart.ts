@@ -547,8 +547,26 @@ export function bundleToChartData(b: DartBundle): FinancialChartData {
       unit: "백만원",
     },
     {
+      label: "이자비용",
+      patterns: [/^이자비용$/, /^금융비용$/, /이자비용/],
+      category: "income",
+      unit: "백만원",
+    },
+    {
       label: "영업활동현금흐름",
       patterns: [/^영업활동.*현금흐름$/, /영업활동으로인한현금흐름/],
+      category: "cashflow",
+      unit: "백만원",
+    },
+    {
+      label: "투자활동현금흐름",
+      patterns: [/^투자활동.*현금흐름$/, /투자활동으로인한현금흐름/],
+      category: "cashflow",
+      unit: "백만원",
+    },
+    {
+      label: "재무활동현금흐름",
+      patterns: [/^재무활동.*현금흐름$/, /재무활동으로인한현금흐름/],
       category: "cashflow",
       unit: "백만원",
     },
@@ -567,6 +585,18 @@ export function bundleToChartData(b: DartBundle): FinancialChartData {
     {
       label: "자본총계",
       patterns: [/^자본총계$/, /^자기자본$/],
+      category: "balance",
+      unit: "백만원",
+    },
+    {
+      label: "단기차입금",
+      patterns: [/^단기차입금$/, /단기차입금/],
+      category: "balance",
+      unit: "백만원",
+    },
+    {
+      label: "장기차입금",
+      patterns: [/^장기차입금$/, /장기차입금/],
       category: "balance",
       unit: "백만원",
     },

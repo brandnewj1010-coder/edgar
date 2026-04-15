@@ -179,8 +179,26 @@ export async function fetchEdgarFinancials(cik: string): Promise<FinancialChartD
       unit: "USD",
     },
     {
+      label: "Interest Expense",
+      keys: ["InterestExpense", "InterestExpenseDebt"],
+      category: "income",
+      unit: "USD",
+    },
+    {
       label: "Operating Cash Flow",
       keys: ["NetCashProvidedByUsedInOperatingActivities"],
+      category: "cashflow",
+      unit: "USD",
+    },
+    {
+      label: "Investing Cash Flow",
+      keys: ["NetCashProvidedByUsedInInvestingActivities"],
+      category: "cashflow",
+      unit: "USD",
+    },
+    {
+      label: "Financing Cash Flow",
+      keys: ["NetCashProvidedByUsedInFinancingActivities"],
       category: "cashflow",
       unit: "USD",
     },
@@ -199,6 +217,12 @@ export async function fetchEdgarFinancials(cik: string): Promise<FinancialChartD
     {
       label: "Stockholders Equity",
       keys: ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
+      category: "balance",
+      unit: "USD",
+    },
+    {
+      label: "Long-term Debt",
+      keys: ["LongTermDebt", "LongTermDebtNoncurrent"],
       category: "balance",
       unit: "USD",
     },
