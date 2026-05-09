@@ -41,6 +41,7 @@ export function demoAnalyzeResponse(
 
   return {
     reportMarkdown: md(title),
+    headline: "본업이 흔들려도 사이드 비즈니스가 받쳐준 한 해(데모)",
     quiz: [
       {
         question: "영업이익이 의미하는 바로 가장 가까운 것은?",

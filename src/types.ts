@@ -35,6 +35,8 @@ export type SankeyChartData = {
 
 export type AnalyzeResponse = {
   reportMarkdown: string;
+  /** "회사를 한 줄로" 비유·요약 헤드라인. 모델이 생성 못 했으면 빈 문자열. */
+  headline?: string;
   quiz: QuizItem[];
   reflectionPrompts: ReflectionItem[];
   sankey: SankeyChartData | null;

@@ -137,6 +137,27 @@ export default function App() {
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
+          <div className="mx-auto mb-4 max-w-[1280px]">
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="mt-0.5 shrink-0"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4M12 8h.01" />
+              </svg>
+              <span>
+                InsightAnalyzer는 <b>교육·정보 제공 목적</b>이며, 투자 권유나
+                매수·매도 추천이 아닙니다. AI 해설은 검색 결과를 바탕으로 생성되어
+                실제 공시 수치와 차이가 있을 수 있어요.
+              </span>
+            </div>
+          </div>
           {error && (
             <div className="mx-auto mb-6 max-w-3xl rounded-2xl border border-rose-200/90 bg-rose-50/90 px-5 py-4 text-sm text-rose-800 shadow-sm">
               {error}
@@ -201,7 +222,7 @@ export default function App() {
 
           {result && !loading && (
             <div
-              className={`mx-auto max-w-3xl transition-opacity duration-200 ${restoring ? "pointer-events-none opacity-60" : "opacity-100"}`}
+              className={`mx-auto max-w-[1280px] transition-opacity duration-200 ${restoring ? "pointer-events-none opacity-60" : "opacity-100"}`}
             >
               {restoring ? (
                 <p className="mb-3 text-center text-xs font-medium text-indigo-600">
@@ -233,6 +254,22 @@ export default function App() {
                   <h2 className="truncate text-xl font-semibold tracking-tight text-slate-900 md:text-2xl">
                     {result.query}
                   </h2>
+                  {result.headline ? (
+                    <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-slate-700 md:text-[16px]">
+                      <span
+                        className="font-semibold"
+                        style={{
+                          backgroundImage:
+                            "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                          WebkitBackgroundClip: "text",
+                          backgroundClip: "text",
+                          WebkitTextFillColor: "transparent",
+                        }}
+                      >
+                        “{result.headline}”
+                      </span>
+                    </p>
+                  ) : null}
                 </div>
               </div>
 

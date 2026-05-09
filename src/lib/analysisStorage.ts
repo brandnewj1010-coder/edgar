@@ -14,6 +14,7 @@ function normalizeAnalyzeResponse(
       : null;
   return {
     reportMarkdown: d?.reportMarkdown ?? "",
+    headline: typeof d?.headline === "string" ? d.headline : "",
     quiz: Array.isArray(d?.quiz) ? d.quiz : [],
     reflectionPrompts: Array.isArray(d?.reflectionPrompts)
       ? d.reflectionPrompts
@@ -75,6 +76,7 @@ type DbReportRow = {
 function rowToResponse(row: DbReportRow): AnalyzeResponse {
   const meta = (row.meta || {}) as {
     model?: string;
+    headline?: string;
     groundingQueries?: string[];
     sources?: { title: string; uri: string }[];
     reflectionPrompts?: AnalyzeResponse["reflectionPrompts"];
@@ -86,6 +88,7 @@ function rowToResponse(row: DbReportRow): AnalyzeResponse {
     source: row.source as AnalyzeResponse["source"],
     query: String(row.query),
     reportMarkdown: String(row.report_markdown),
+    headline: meta.headline,
     quiz: Array.isArray(row.quiz) ? (row.quiz as AnalyzeResponse["quiz"]) : [],
     reflectionPrompts: meta.reflectionPrompts,
     sankey: meta.sankey as AnalyzeResponse["sankey"],
@@ -124,6 +127,7 @@ export async function saveReport(data: AnalyzeResponse): Promise<void> {
         quiz: trimmed.quiz,
         meta: {
           model: trimmed.model,
+          headline: trimmed.headline,
           groundingQueries: trimmed.groundingQueries,
           sources: trimmed.sources,
           reflectionPrompts: trimmed.reflectionPrompts,

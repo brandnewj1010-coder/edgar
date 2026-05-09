@@ -144,7 +144,7 @@ body {
   box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.2);
 }
 
-/* 표 — 리포트용 */
+/* 표 — 리포트용 (PR1 강화: 우측정렬·천단위·헤더 강조·짝수행·음수 빨강) */
 .report-table-outer {
   @apply my-9 overflow-x-auto rounded-2xl border border-stone-200/90 bg-white shadow-sm;
   -webkit-overflow-scrolling: touch;
@@ -155,28 +155,51 @@ body {
 }
 
 .report-table thead {
-  @apply bg-gradient-to-b from-slate-50 to-slate-50/50;
+  background: linear-gradient(180deg, #eef2ff 0%, #e0e7ff 100%);
 }
 
 .report-table th {
-  @apply border-b border-stone-200/90 px-5 py-3.5 font-semibold tracking-wide text-slate-800;
+  @apply border-b border-indigo-200/60 px-5 py-3.5 font-semibold tracking-wide text-indigo-900;
   font-size: 0.8125rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-table th:first-child {
+  text-align: left;
 }
 
 .report-table td {
   @apply border-b border-stone-100 px-5 py-3 align-top text-slate-600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-table td:first-child {
+  text-align: left;
+  color: #1e293b;
+  font-weight: 500;
 }
 
 .report-table tbody tr {
   @apply transition-colors;
 }
 
+.report-table tbody tr:nth-child(even) td {
+  background: #fafbfd;
+}
+
 .report-table tbody tr:hover td {
-  @apply bg-indigo-50/30;
+  background: #eef2ff;
 }
 
 .report-table tbody tr:last-child td {
   @apply border-b-0;
+}
+
+/* 음수 셀 강조 — JSX에서 .is-negative 클래스 부착 */
+.report-table td.is-negative {
+  color: #dc2626;
 }
 
 /* 코드 */

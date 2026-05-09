@@ -1,5 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { GoogleGenAI } from "@google/genai";
+import {
+  applyRateLimitHeaders,
+  checkRateLimit,
+  getClientIp,
+} from "./_rateLimit";
 
 /** Vercel 플랜에 따라 상한이 다릅니다(무료 플랜은 더 짧을 수 있음). */
 export const config = { maxDuration: 60 };
@@ -55,6 +60,14 @@ ${compareBlock}${yearBlock}
 # 리스크·주의사항
 # 핵심 용어 학습 (EBITDA, 영업이익, 부채비율, 유동비율, 영업활동현금흐름 등 해당되는 용어를 설명과 함께 나열)
 
+⚠ 본문 시작 전, 첫 줄에 다음 형식의 **헤드라인 한 줄**을 넣으세요:
+> HEADLINE: <60자 이내 한 줄 비유·요약>
+
+- 회사를 처음 보는 사람에게 "한 줄로 설명한다면" 톤.
+- 비유나 메타포 1개 권장(강제 아님).
+- 따옴표·이모지 사용 금지. 한국어로 한 줄.
+- 그 다음 줄부터 \`# 개요\` 등 본문 헤딩 시작.
+
 전문 용어는 처음 등장 시 짧게 풀어쓰기.`;
   }
 
@@ -76,7 +89,13 @@ Output: **Markdown** with sections:
 # 리스크·주의사항
 # 핵심 용어 학습 (영문 약어 병기)
 
-Use clear headings and bullet points where helpful.`;
+Use clear headings and bullet points where helpful.
+
+At the very first line of your output, include a HEADLINE line in this exact format:
+> HEADLINE: <Korean one-liner, 60 chars or fewer>
+
+- Optional metaphor; concise; no quotes or emojis.
+- The markdown report (\`# 개요\` …) starts on the next line.`;
 }
 
 function normalizeQuizItems(raw: unknown): {
@@ -181,6 +200,30 @@ function normalizeSankey(raw: unknown): SankeyNormalized | null {
   };
 }
 
+function extractHeadline(markdown: string): {
+  headline: string;
+  rest: string;
+} {
+  const lines = markdown.split(/\r?\n/);
+  for (let i = 0; i < Math.min(lines.length, 4); i++) {
+    const line = lines[i] ?? "";
+    const m = line.match(/^>\s*HEADLINE\s*[:：]\s*(.+)$/i);
+    if (m) {
+      const headline = (m[1] ?? "")
+        .trim()
+        .replace(/^["“”']+|["“”']+$/g, "")
+        .slice(0, 80);
+      const rest = lines
+        .slice(0, i)
+        .concat(lines.slice(i + 1))
+        .join("\n")
+        .replace(/^\s+/, "");
+      return { headline, rest };
+    }
+  }
+  return { headline: "", rest: markdown };
+}
+
 function parseQuizFromModelText(text: string): {
   question: string;
   choices: string[];
@@ -218,6 +261,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const ip = getClientIp(req);
+  const rl = checkRateLimit(ip);
+  applyRateLimitHeaders(res, rl);
+  if (!rl.allowed) {
+    const resetIn = Math.max(
+      1,
+      Math.ceil((rl.resetAt - Date.now()) / 1000 / 60),
+    );
+    res.status(429).json({
+      error: `오늘의 분석 횟수를 모두 사용했어요 (하루 ${rl.limit}건). 약 ${resetIn}분 뒤 다시 시도해 주세요.`,
+    });
     return;
   }
 
@@ -274,13 +331,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
 
-    const reportMarkdown =
+    const rawMarkdown =
       analysis.text?.trim() ??
       analysis.candidates?.[0]?.content?.parts
         ?.map((p) => ("text" in p ? p.text : ""))
         .join("\n")
         .trim() ??
       "";
+
+    const { headline, rest: reportMarkdown } = extractHeadline(rawMarkdown);
 
     if (!reportMarkdown) {
       res.status(502).json({ error: "모델 응답이 비어 있습니다." });
@@ -374,6 +433,7 @@ ${slice}
 
     res.status(200).json({
       reportMarkdown,
+      headline,
       quiz,
       reflectionPrompts,
       sankey,
