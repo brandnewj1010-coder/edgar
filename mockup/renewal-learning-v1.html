@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>InsightAnalyzer 리뉴얼 v1 — 학습 모드 Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable.min.css" />
+  <style>
+    :root {
+      --bg: #fdfaf3;
+    }
+    body {
+      background: var(--bg);
+      font-family: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif;
+      color: #334155;
+      -webkit-font-smoothing: antialiased;
+    }
+    .serif { font-family: "Noto Serif KR", Georgia, serif; }
+    .mono  { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+    .num   { font-variant-numeric: tabular-nums; }
+    .section-tag {
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: #b45309;
+      background: #fef3c7;
+      border: 1px solid #fde68a;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid rgba(15,23,42,0.07);
+      border-radius: 1rem;
+      box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 8px 24px -16px rgba(15,23,42,0.08);
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 2px 8px; border-radius: 999px;
+      font-weight: 500;
+    }
+    .chip-amber { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .chip-emerald { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .chip-rose { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .chip-slate { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .term-card {
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+    .term-card:hover { background: #fef3c7; border-color: #fde68a; transform: translateY(-1px); }
+    .book {
+      background: linear-gradient(180deg, #fffaf0 0%, #fef3c7 100%);
+      border: 1px solid #fde68a;
+    }
+    .quiz-opt {
+      display: block;
+      width: 100%; text-align: left;
+      padding: 8px 12px; border-radius: 8px;
+      border: 1px solid #e2e8f0; background: #fff;
+      font-size: 12.5px; color: #334155;
+      transition: all 0.1s ease;
+    }
+    .quiz-opt:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .quiz-opt.correct { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+    .quiz-opt.wrong { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ====================================================================== -->
+<!-- TOP BAR                                                                -->
+<!-- ====================================================================== -->
+<header class="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-amber-100">
+  <div class="max-w-[1480px] mx-auto px-6 py-3 flex items-center gap-4">
+    <div class="flex items-center gap-2.5">
+      <div class="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-sm">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      </div>
+      <div class="leading-tight">
+        <div class="text-[13px] font-bold text-slate-900">InsightAnalyzer</div>
+        <div class="text-[10px] text-amber-700">학습 모드 · DART·EDGAR로 회계 공부</div>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="flex-1 max-w-2xl mx-auto">
+      <div class="relative">
+        <input class="w-full bg-amber-50/60 hover:bg-white focus:bg-white border border-transparent focus:border-amber-300 rounded-xl pl-10 pr-20 py-2.5 text-sm placeholder:text-slate-400 outline-none focus:ring-4 focus:ring-amber-500/10 transition" placeholder="용어·기업·미션 검색  (예: EBITDA, 삼성전자, 현금흐름)" />
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 mono bg-white border border-slate-200 px-1.5 py-0.5 rounded">⌘ K</span>
+      </div>
+    </div>
+
+    <!-- Mode toggle -->
+    <div class="flex items-center bg-slate-100 rounded-lg p-1 text-[12px]">
+      <button class="px-3 py-1.5 rounded-md text-slate-500 hover:text-slate-700">분석</button>
+      <button class="px-3 py-1.5 rounded-md bg-white shadow-sm font-medium text-amber-700">학습</button>
+    </div>
+
+    <button class="text-[12px] text-slate-500 hover:text-slate-700 px-3 py-1.5">로그인</button>
+  </div>
+</header>
+
+<!-- ====================================================================== -->
+<!-- COMPANY CONTEXT BAR  ·  (분석 모드와 컨텍스트 동기화)                     -->
+<!-- ====================================================================== -->
+<div class="border-b border-amber-100/80 bg-white/60">
+  <div class="max-w-[1480px] mx-auto px-6 py-2.5 flex items-center gap-3 text-[12px] flex-wrap">
+    <span class="text-slate-500">📊 학습 컨텍스트</span>
+    <span class="chip chip-slate font-semibold mono">DART · 005930</span>
+    <span class="font-bold text-slate-900">삼성전자</span>
+    <span class="text-slate-400">2024 사업보고서 기준</span>
+    <button class="ml-auto text-amber-700 hover:text-amber-900 font-semibold">회사 변경 →</button>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- INTRO NOTE                                                            -->
+<!-- ====================================================================== -->
+<div class="max-w-[1480px] mx-auto px-6 pt-6">
+  <div class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-[12px] text-amber-900 flex items-start gap-2">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+    <div>
+      <span class="font-semibold">학습 모드 Mockup v2.</span>
+      미션 / 용어 도감 / 워크북 / 트레이너 4가지 핵심 카드만 남겼습니다.
+      섹션 라벨 <span class="section-tag">L.x</span> 로 피드백 주세요.
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- DAILY MISSION (+ 빠른 퀴즈 흡수)  ·  L.2                                 -->
+<!-- ====================================================================== -->
+<section class="max-w-[1480px] mx-auto px-6 pt-6">
+  <div class="flex items-center gap-2 mb-3">
+    <span class="section-tag">L.2</span>
+    <h2 class="text-[13px] font-semibold text-slate-700">오늘의 미션 — 5분</h2>
+    <span class="text-[11px] text-slate-400">개념 한 컷 + 공시 발췌 + 빠른 퀴즈로 마무리</span>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+    <!-- 미션 본문 (좌·중) -->
+    <div class="card p-6 lg:col-span-2 book">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="chip chip-amber">현금흐름</span>
+        <span class="chip chip-slate">난이도 ★★☆</span>
+        <span class="chip chip-slate">5분</span>
+      </div>
+      <h3 class="serif text-[22px] font-bold text-amber-950 leading-snug">
+        영업이익 ≠ 영업현금흐름. 왜 둘이 다른가요?
+      </h3>
+      <p class="mt-3 text-[14px] leading-relaxed text-amber-900/90">
+        삼성전자 2023년 영업이익은 <b class="num">6,567억</b>인데, 영업활동현금흐름은
+        <b class="num">44,131억</b> 이었습니다. 무려 6.7배 차이.
+        이 갭의 이유 3가지를 알면 <span class="font-semibold">발생주의·현금주의</span>의 핵심이 잡힙니다.
+      </p>
+
+      <!-- 미션 단계 -->
+      <ol class="mt-5 grid grid-cols-1 md:grid-cols-3 gap-2 text-[12px]">
+        <li class="rounded-lg bg-white/80 border border-amber-200 px-3 py-2">
+          <div class="font-semibold text-amber-900">1. 핵심 개념 1컷</div>
+          <div class="text-slate-600 mt-0.5">감가상각·운전자본 세 가지</div>
+        </li>
+        <li class="rounded-lg bg-white/80 border border-amber-200 px-3 py-2">
+          <div class="font-semibold text-amber-900">2. 공시 발췌 보기</div>
+          <div class="text-slate-600 mt-0.5">삼성전자 ’23 현금흐름표</div>
+        </li>
+        <li class="rounded-lg bg-white/80 border border-amber-200 px-3 py-2">
+          <div class="font-semibold text-amber-900">3. 빠른 퀴즈 → 한 줄 정리</div>
+          <div class="text-slate-600 mt-0.5">아래에서 바로 풀어 보기</div>
+        </li>
+      </ol>
+
+      <!-- 빠른 퀴즈 (L5에서 흡수) -->
+      <div class="mt-5 rounded-xl bg-white/90 border border-amber-200 p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-[11px] font-semibold text-amber-700">🎯 빠른 퀴즈 1문항</span>
+          <span class="text-[10px] text-slate-400">정답이면 다음 단계로</span>
+        </div>
+        <p class="text-[13px] font-semibold text-slate-900 mb-3">"잉여현금흐름(FCF)" 의 일반적 계산식은?</p>
+        <div class="space-y-1.5">
+          <button class="quiz-opt">① 매출 − 매출원가 − 판관비</button>
+          <button class="quiz-opt correct">② 영업활동현금흐름 − CapEx ✓</button>
+          <button class="quiz-opt">③ 당기순이익 + 감가상각비</button>
+          <button class="quiz-opt">④ 영업이익 × (1 − 세율)</button>
+        </div>
+      </div>
+
+      <div class="mt-5 flex flex-wrap gap-2 text-[12px]">
+        <button class="px-4 py-2 rounded-lg bg-amber-600 text-white font-semibold shadow-sm hover:bg-amber-700">▶ 미션 시작</button>
+        <button class="px-4 py-2 rounded-lg bg-white border border-amber-200 text-amber-800 hover:bg-amber-50">미리 보기</button>
+        <button class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-slate-50">건너뛰기</button>
+      </div>
+    </div>
+
+    <!-- 우: 어제·내일 -->
+    <div class="space-y-3">
+      <div class="card p-4 bg-emerald-50/50 border-emerald-200">
+        <div class="text-[11px] font-semibold text-emerald-700 mb-1">✅ 어제의 미션</div>
+        <div class="text-[13px] text-slate-800 font-semibold">"감가상각비는 왜 비용인데 현금이 안 나가나?"</div>
+        <div class="text-[11px] text-emerald-700 mt-1">3/3 정답</div>
+      </div>
+      <div class="card p-4">
+        <div class="text-[11px] font-semibold text-amber-700 mb-1">🔜 내일 예고</div>
+        <div class="text-[13px] text-slate-800 font-semibold">"운전자본이 늘면 왜 현금이 줄까?"</div>
+        <div class="text-[11px] text-slate-500 mt-1">현금흐름 카테고리 · 4분</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- GLOSSARY  ·  L.4                                                       -->
+<!-- ====================================================================== -->
+<section class="max-w-[1480px] mx-auto px-6 pt-6">
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <span class="section-tag">L.4</span>
+        <h3 class="text-[13px] font-semibold text-slate-700">용어 도감 · 411개</h3>
+      </div>
+      <span class="text-[11px] text-slate-400">즐겨찾기 12 · 학습 완료 87</span>
+    </div>
+    <!-- 카테고리 필터 -->
+    <div class="flex flex-wrap gap-1.5 mb-4 text-[11px]">
+      <button class="px-2.5 py-1 rounded-full bg-amber-600 text-white font-semibold">전체 411</button>
+      <button class="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200">매출·손익 38</button>
+      <button class="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 font-semibold ring-1 ring-rose-300">현금흐름 24 ⚠</button>
+      <button class="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200">재무상태표 42</button>
+      <button class="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200">수익성·밸류 31</button>
+      <button class="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200">성장·비교 18</button>
+      <button class="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200">공시·회계 22</button>
+      <button class="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200">리스크 36</button>
+    </div>
+    <!-- 용어 카드 그리드 -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+      <div class="term-card border border-slate-200 rounded-lg p-3">
+        <div class="flex items-center justify-between">
+          <div class="font-bold text-slate-900 text-[13px]">EBITDA</div>
+          <span class="text-[10px] text-slate-400">★ 즐겨</span>
+        </div>
+        <div class="text-[11px] text-slate-500 mt-1">본업의 현금 수익력</div>
+      </div>
+      <div class="term-card border border-slate-200 rounded-lg p-3">
+        <div class="flex items-center justify-between">
+          <div class="font-bold text-slate-900 text-[13px]">영업이익</div>
+          <span class="text-[10px] text-emerald-600">✓ 학습</span>
+        </div>
+        <div class="text-[11px] text-slate-500 mt-1">매출 − 매출원가 − 판관비</div>
+      </div>
+      <div class="term-card border border-rose-200 bg-rose-50/40 rounded-lg p-3">
+        <div class="flex items-center justify-between">
+          <div class="font-bold text-rose-900 text-[13px]">영업활동현금흐름</div>
+          <span class="text-[10px] text-rose-600">⚠ 약점</span>
+        </div>
+        <div class="text-[11px] text-rose-700/80 mt-1">발생 vs 현금 차이의 핵심</div>
+      </div>
+      <div class="term-card border border-slate-200 rounded-lg p-3">
+        <div class="flex items-center justify-between">
+          <div class="font-bold text-slate-900 text-[13px]">부채비율</div>
+          <span class="text-[10px] text-emerald-600">✓ 학습</span>
+        </div>
+        <div class="text-[11px] text-slate-500 mt-1">총부채 / 자기자본 × 100</div>
+      </div>
+      <div class="term-card border border-rose-200 bg-rose-50/40 rounded-lg p-3">
+        <div class="flex items-center justify-between">
+          <div class="font-bold text-rose-900 text-[13px]">FCF (잉여현금흐름)</div>
+          <span class="text-[10px] text-rose-600">⚠ 미학습</span>
+        </div>
+        <div class="text-[11px] text-rose-700/80 mt-1">영업CF − CapEx</div>
+      </div>
+      <div class="term-card border border-slate-200 rounded-lg p-3">
+        <div class="flex items-center justify-between">
+          <div class="font-bold text-slate-900 text-[13px]">ROE</div>
+          <span class="text-[10px] text-emerald-600">✓ 학습</span>
+        </div>
+        <div class="text-[11px] text-slate-500 mt-1">자본 대비 이익 효율</div>
+      </div>
+      <div class="term-card border border-slate-200 rounded-lg p-3">
+        <div class="flex items-center justify-between">
+          <div class="font-bold text-slate-900 text-[13px]">유동비율</div>
+          <span class="text-[10px] text-slate-400">미학습</span>
+        </div>
+        <div class="text-[11px] text-slate-500 mt-1">유동자산 / 유동부채</div>
+      </div>
+      <div class="term-card border border-slate-200 rounded-lg p-3">
+        <div class="flex items-center justify-between">
+          <div class="font-bold text-slate-900 text-[13px]">감가상각비</div>
+          <span class="text-[10px] text-emerald-600">✓ 학습</span>
+        </div>
+        <div class="text-[11px] text-slate-500 mt-1">현금 안 나가는 비용</div>
+      </div>
+    </div>
+    <button class="mt-4 w-full py-2 rounded-lg border border-amber-200 bg-amber-50/50 hover:bg-amber-100 text-[12px] text-amber-800 font-semibold">전체 용어 도감 열기 →</button>
+  </div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- WORKBOOK  ·  L.6                                                       -->
+<!-- ====================================================================== -->
+<section class="max-w-[1480px] mx-auto px-6 pt-6">
+  <div class="card p-0 overflow-hidden">
+    <div class="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+      <span class="section-tag">L.6</span>
+      <h3 class="text-[13px] font-semibold text-slate-700">📖 공시 읽기 워크북 — 실제 보고서를 함께 읽기</h3>
+      <span class="chip chip-emerald ml-2">wow 후보</span>
+      <span class="text-[11px] text-slate-400 ml-auto">현재 워크북: <b>삼성전자 2023 사업보고서</b></span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-0">
+      <!-- 왼쪽: 단계 트레이 -->
+      <div class="lg:col-span-2 bg-amber-50/40 border-r border-amber-100 p-5">
+        <div class="text-[11px] font-semibold text-amber-700 mb-3">단계 1 / 5</div>
+        <ol class="space-y-3">
+          <li class="flex gap-3">
+            <div class="h-7 w-7 rounded-full bg-amber-600 text-white text-[12px] font-bold flex items-center justify-center shrink-0">1</div>
+            <div>
+              <div class="text-[13px] font-bold text-amber-950">메모리 한파의 흔적 찾기</div>
+              <div class="text-[11px] text-slate-600 mt-0.5">손익계산서 ‘영업이익’ 줄에서 6.5배 갭의 정체 찾기</div>
+            </div>
+          </li>
+          <li class="flex gap-3 opacity-50">
+            <div class="h-7 w-7 rounded-full bg-white border border-slate-300 text-slate-500 text-[12px] font-bold flex items-center justify-center shrink-0">2</div>
+            <div>
+              <div class="text-[13px] font-bold text-slate-700">현금흐름 vs 이익 비교</div>
+              <div class="text-[11px] text-slate-500 mt-0.5">왜 현금은 무사한가? 감가상각의 마법</div>
+            </div>
+          </li>
+          <li class="flex gap-3 opacity-50">
+            <div class="h-7 w-7 rounded-full bg-white border border-slate-300 text-slate-500 text-[12px] font-bold flex items-center justify-center shrink-0">3</div>
+            <div>
+              <div class="text-[13px] font-bold text-slate-700">재고자산 평가손실 발견</div>
+              <div class="text-[11px] text-slate-500 mt-0.5">주석 23번에서 무엇을 찾을까</div>
+            </div>
+          </li>
+          <li class="flex gap-3 opacity-50">
+            <div class="h-7 w-7 rounded-full bg-white border border-slate-300 text-slate-500 text-[12px] font-bold flex items-center justify-center shrink-0">4</div>
+            <div>
+              <div class="text-[13px] font-bold text-slate-700">재무건전성 진단</div>
+              <div class="text-[11px] text-slate-500 mt-0.5">부채비율·이자보상배율로 위기인가 확인</div>
+            </div>
+          </li>
+          <li class="flex gap-3 opacity-50">
+            <div class="h-7 w-7 rounded-full bg-white border border-slate-300 text-slate-500 text-[12px] font-bold flex items-center justify-center shrink-0">5</div>
+            <div>
+              <div class="text-[13px] font-bold text-slate-700">한 줄 결론 쓰기</div>
+              <div class="text-[11px] text-slate-500 mt-0.5">AI 피드백으로 작문 다듬기</div>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <!-- 오른쪽: 현재 단계 콘텐츠 -->
+      <div class="lg:col-span-3 p-6">
+        <div class="text-[11px] font-semibold text-amber-700">단계 1</div>
+        <h3 class="serif text-[20px] font-bold text-slate-900 mt-1 leading-snug">
+          이 줄을 보세요 — "영업이익 6,567억"
+        </h3>
+        <p class="text-[13px] text-slate-700 mt-3 leading-relaxed">
+          삼성전자의 2022년 영업이익은 43.4조였습니다. 그런데 2023년엔 단 <b>6,567억</b>. <b>약 1/6</b>로 폭락했어요.
+          한 회사 안에서 1년 사이에 이 정도 변동은 흔치 않습니다. 어디에서 빠진 걸까요?
+        </p>
+
+        <!-- 발췌 -->
+        <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div class="text-[10px] text-slate-500 mb-2 font-semibold">📄 사업보고서 발췌 (요약)</div>
+          <p class="serif text-[13px] text-slate-800 leading-relaxed">
+            "당기 영업이익은 <b class="bg-amber-200/60 px-1 rounded">6,566억원</b>으로 전기 대비 <b class="bg-rose-200/60 px-1 rounded">84.9% 감소</b>하였습니다.
+            이는 메모리 반도체 가격 약세에 따른 수익성 악화에 주로 기인하며,
+            DS부문은 <b class="bg-rose-200/60 px-1 rounded">14.9조원의 영업적자</b>를 기록하였습니다."
+          </p>
+          <a class="text-[11px] text-amber-700 mt-2 inline-block hover:underline" href="#">📎 원문 사업보고서 보기 →</a>
+        </div>
+
+        <!-- 인터랙션 -->
+        <div class="mt-5 rounded-xl bg-amber-50 border border-amber-200 p-4">
+          <div class="text-[12px] font-semibold text-amber-900 mb-2">🤔 한 번 생각해 봐요</div>
+          <p class="text-[13px] text-amber-900 mb-3">위 문단에서 <b>가장 중요한 키워드 한 개</b>를 골라보면?</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="quiz-opt">메모리 반도체 가격 약세</button>
+            <button class="quiz-opt">DS부문 14.9조 적자</button>
+            <button class="quiz-opt">영업이익 84.9% 감소</button>
+            <button class="quiz-opt">전기 대비 비교</button>
+          </div>
+          <div class="text-[10px] text-amber-700 mt-3">힌트: "원인" 인지 "결과" 인지 구분해 보세요.</div>
+        </div>
+
+        <div class="mt-6 flex items-center justify-between">
+          <button class="text-[12px] text-slate-500 px-4 py-2 rounded-lg hover:bg-slate-100">← 처음으로</button>
+          <button class="px-5 py-2.5 rounded-lg bg-amber-600 text-white font-semibold text-[13px] shadow-sm hover:bg-amber-700">다음 단계 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- TRAINER  ·  L.7  (검색한 회사 = 삼성전자 데이터로)                         -->
+<!-- ====================================================================== -->
+<section class="max-w-[1480px] mx-auto px-6 pt-6 pb-12">
+  <div class="card p-5">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="section-tag">L.7</span>
+      <h3 class="text-[13px] font-semibold text-slate-700">🧮 재무 트레이너 — 손으로 비율 계산해 보기</h3>
+      <span class="chip chip-slate ml-2">90초</span>
+      <span class="text-[11px] text-slate-400 ml-auto">데이터: 삼성전자 2023 연결 재무상태표 <span class="chip chip-emerald ml-1">실데이터</span></span>
+    </div>
+    <p class="text-[12px] text-slate-600 mb-4">분석 모드에서 보고 있던 <b>삼성전자(005930)</b> 의 실제 재무상태표입니다. <b>부채비율</b>을 계산해 보세요. 자판으로 입력하면 자동 채점됩니다.</p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <!-- 실제 재무제표 -->
+      <div class="lg:col-span-2 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-[11px] font-semibold text-slate-700">📊 삼성전자 (005930) · 2023 연결 재무상태표 (요약)</div>
+          <span class="text-[10px] text-slate-500 mono">단위: 억원</span>
+        </div>
+        <table class="w-full text-[12.5px] mono num">
+          <tbody>
+            <tr><td class="py-1.5 text-slate-700">유동자산</td><td class="py-1.5 text-right">1,956,492</td></tr>
+            <tr><td class="py-1.5 text-slate-700">비유동자산</td><td class="py-1.5 text-right">2,597,148</td></tr>
+            <tr class="border-t border-slate-300"><td class="py-1.5 font-bold">자산 총계</td><td class="py-1.5 text-right font-bold">4,553,640</td></tr>
+            <tr><td class="py-1.5 text-slate-700 pt-3">유동부채</td><td class="py-1.5 text-right">  753,580</td></tr>
+            <tr><td class="py-1.5 text-slate-700">비유동부채</td><td class="py-1.5 text-right">  173,820</td></tr>
+            <tr class="border-t border-slate-300"><td class="py-1.5 font-bold">부채 총계</td><td class="py-1.5 text-right font-bold">  927,400</td></tr>
+            <tr><td class="py-1.5 text-slate-700 pt-3">자본금</td><td class="py-1.5 text-right">    8,975</td></tr>
+            <tr><td class="py-1.5 text-slate-700">이익잉여금</td><td class="py-1.5 text-right">3,447,815</td></tr>
+            <tr class="border-t border-slate-300"><td class="py-1.5 font-bold">자본 총계</td><td class="py-1.5 text-right font-bold">3,626,240</td></tr>
+          </tbody>
+        </table>
+        <div class="text-[10px] text-slate-400 mt-3">출처: DART 사업보고서 (2023.12.31 기준) · 본 mockup 표시 수치는 예시 가공</div>
+      </div>
+
+      <!-- 입력 -->
+      <div class="rounded-xl border border-amber-200 bg-amber-50/60 p-4 flex flex-col">
+        <div class="text-[11px] font-semibold text-amber-800 mb-2">정답 입력</div>
+        <div class="text-[13px] text-amber-900 mb-3">부채비율 = ?</div>
+        <div class="flex items-center gap-2">
+          <input type="text" placeholder="숫자만" class="num text-right flex-1 px-3 py-2 rounded-lg border border-amber-300 bg-white text-[18px] font-bold focus:outline-none focus:ring-4 focus:ring-amber-500/15"/>
+          <span class="text-[18px] font-bold text-amber-800">%</span>
+        </div>
+        <button class="mt-3 px-4 py-2 rounded-lg bg-amber-600 text-white font-semibold text-[12px]">채점하기</button>
+        <div class="mt-4 pt-3 border-t border-amber-200 text-[11px] text-amber-800/90 leading-relaxed">
+          힌트: <span class="mono">부채총계 ÷ 자본총계 × 100</span>
+          <div class="mt-1 text-amber-700/70">참고: 분석 모드의 KPI 카드(부채비율 25.4%)와 결과를 맞춰 보세요.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================================================================== -->
+<!-- FOOTER                                                                 -->
+<!-- ====================================================================== -->
+<footer class="max-w-[1480px] mx-auto px-6 py-6 text-center text-[11px] text-slate-400">
+  학습 모드 Mockup v2 · 2026-05-06 · 분석 모드: <code>mockup/renewal-v1.html</code>
+</footer>
+
+</body>
+</html>
