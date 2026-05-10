@@ -185,22 +185,19 @@ export async function resolveDartCorp(
   const q = query.trim();
   if (!q) return null;
 
-  // 1. 숫자 → 종목코드 직접 조회
+  // 1. 숫자 → 종목코드로 XML 조회 (corp_code는 XML이 정본)
   if (/^\d{1,6}$/.test(q)) {
     const code = q.padStart(6, "0");
-    const direct = DART_CORP_BY_STOCK[code];
-    if (direct) return direct;
     const xml = await loadCorpXml(crtfc_key);
-    return findCorpInXml(code, xml);
+    return findCorpInXml(code, xml) ?? DART_CORP_BY_STOCK[code] ?? null;
   }
 
-  // 2. alias 테이블 (대소문자·공백 무관) — 하드코딩 테이블로 즉시 반환 (XML 생략)
+  // 2. alias 테이블 → 종목코드 확정 후 XML로 정확한 corp_code 조회
+  // 하드코딩 corp_code는 틀릴 수 있으므로 XML을 정본으로 사용
   const stockCode = lookupAlias(q);
   if (stockCode) {
-    const direct = DART_CORP_BY_STOCK[stockCode];
-    if (direct) return direct;
     const xml = await loadCorpXml(crtfc_key);
-    return findCorpInXml(stockCode, xml);
+    return findCorpInXml(stockCode, xml) ?? DART_CORP_BY_STOCK[stockCode] ?? null;
   }
 
   // 3. XML 전체 검색 (한글 회사명 직접 타이핑)
