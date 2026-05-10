@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import OpenAI from "openai";
 import { applyRateLimitHeaders, checkRateLimit, getClientIp } from "./_rateLimit.js";
+import { getCached, setCached } from "./_cache.js";
 import {
   bundleToChartData,
   bundleToMarkdown,
@@ -14,14 +15,45 @@ import {
   fetchRecentFilings,
   resolveEdgarCik,
 } from "./edgar.js";
-import type { QuizItem, FinancialChartData } from "../src/types.js";
+import type { QuizItem, ReflectionItem, FinancialChartData, InsightCards } from "../src/types.js";
 
 export const config = { maxDuration: 60 };
 
 type Source = "dart" | "edgar";
-type Body = { source?: string; query?: string };
+type Body = { source?: string; query?: string; compareWith?: string };
 
 const MIN_REPORT_CHARS = 180;
+
+const HEADLINE_INSTRUCTION = `\n본문 시작 전 **첫 줄**에 아래 형식으로 헤드라인 한 줄을 넣으세요:
+> HEADLINE: <60자 이내 비유·요약>
+- HR 실무자에게 "한 줄로 설명하면" 톤. 따옴표·이모지 없이 한국어.
+- 그 다음 줄부터 본문 헤딩 시작.\n`;
+
+function extractHeadline(markdown: string): { headline: string; rest: string } {
+  const lines = markdown.split(/\r?\n/);
+  for (let i = 0; i < Math.min(lines.length, 5); i++) {
+    const m = (lines[i] ?? "").match(/^>\s*HEADLINE\s*[:：]\s*(.+)$/i);
+    if (m) {
+      const headline = (m[1] ?? "").trim().replace(/^["""']+|["""']+$/g, "").slice(0, 80);
+      const rest = [...lines.slice(0, i), ...lines.slice(i + 1)].join("\n").replace(/^\s+/, "");
+      return { headline, rest };
+    }
+  }
+  return { headline: "", rest: markdown };
+}
+
+function parseReflectionBlock(text: string): ReflectionItem[] {
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/);
+  if (!jsonMatch) return [];
+  try {
+    const parsed = JSON.parse(jsonMatch[1]);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is ReflectionItem =>
+        typeof item.title === "string" && typeof item.prompt === "string",
+    );
+  } catch { return []; }
+}
 
 // ── 퀴즈 파싱 헬퍼 ──────────────────────────────────────────────────────────
 function parseQuizBlock(text: string): QuizItem[] {
@@ -99,7 +131,8 @@ ${dataBlock}
 규칙:
 - 투자 권유·매수·매도 추천 금지
 - 불확실하면 "교육용 요약"임을 밝히기
-- HR 실무자에게 의미 있는 해석 중심으로`;
+- HR 실무자에게 의미 있는 해석 중심으로
+${HEADLINE_INSTRUCTION}`;
 }
 
 // ── EDGAR 프롬프트 ─────────────────────────────────────────────────────────────
@@ -143,7 +176,8 @@ If data is available, include with numbers. If not, explain the formula and sign
 (10-K, DEF 14A sections relevant to HR: employee counts, executive comp, risk factors)
 
 ---
-No investment advice. Say "교육용 요약" if uncertain.`;
+No investment advice. Say "교육용 요약" if uncertain.
+${HEADLINE_INSTRUCTION}`;
 }
 
 // ── Fallback 프롬프트 ─────────────────────────────────────────────────────────
@@ -205,6 +239,77 @@ ${snippet}
 - HR 실무자가 알아야 할 내용 중심 (인건비·임원보수·수익성 등)
 - 난이도 적절 (너무 쉽거나 어렵지 않게)
 - correctIndex는 0~3 정수`;
+}
+
+function buildInsightCardsPrompt(reportMarkdown: string, company: string): string {
+  const snippet = reportMarkdown.slice(0, 3000);
+  return `다음 재무 공시 해설을 바탕으로 HR 실무자를 위한 **구조화된 인사이트 카드**를 JSON으로 생성하세요.
+
+리포트 (일부):
+---
+${snippet}
+---
+
+출력 형식: JSON 코드 블록만. 다른 텍스트 없이.
+\`\`\`json
+{
+  "watchOuts": [
+    {"title": "주목할 점 제목", "detail": "2~3문장 설명", "severity": "high"}
+  ],
+  "anomalies": [
+    {"metric": "지표명 (예: 영업이익률)", "note": "이상치 설명 1문장", "direction": "down"}
+  ],
+  "scenarios": [
+    {"if": "가정 조건 (예: 원/달러 환율 10% 상승 시)", "then": "예상 결과 1~2문장"}
+  ],
+  "strengths": ["강점 한 줄", "강점 한 줄"]
+}
+\`\`\`
+
+조건:
+- 기업: ${company}
+- watchOuts 2~3개, severity는 high/mid/low 중 하나
+- anomalies 1~2개, direction은 up/down/flat 중 하나
+- scenarios 1~2개 (HR·비용 관련 시나리오 우선)
+- strengths 2~3개 (공시에서 확인되는 객관적 강점)
+- 모든 항목은 공시 수치 기반, 추측 금지`;
+}
+
+function buildReflectionPrompt(reportMarkdown: string, company: string): string {
+  const snippet = reportMarkdown.slice(0, 2000);
+  return `다음 재무 공시 해설을 읽고 HR 실무자를 위한 **서술형 성찰 질문 3개**를 만드세요.
+
+리포트 (일부):
+---
+${snippet}
+---
+
+출력 형식: JSON 코드 블록만. 다른 텍스트 없이.
+\`\`\`json
+[
+  {"title": "질문 제목", "prompt": "서술형 질문 내용 (2~3문장)"}
+]
+\`\`\`
+
+조건:
+- 기업: ${company}
+- 정답 없는 열린 질문 (토론·사고 유도)
+- HR 실무자 관점 (인건비·조직구조·보상·채용 등)
+- 3개 질문은 서로 다른 관점에서`;
+}
+
+function parseInsightCards(text: string): InsightCards | null {
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/);
+  if (!jsonMatch) return null;
+  try {
+    const p = JSON.parse(jsonMatch[1]);
+    return {
+      watchOuts: Array.isArray(p.watchOuts) ? p.watchOuts : [],
+      anomalies: Array.isArray(p.anomalies) ? p.anomalies : [],
+      scenarios: Array.isArray(p.scenarios) ? p.scenarios : [],
+      strengths: Array.isArray(p.strengths) ? p.strengths : [],
+    };
+  } catch { return null; }
 }
 
 function sleep(ms: number) {
@@ -276,8 +381,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const source = body.source === "edgar" ? "edgar" : "dart";
     const query = String(body.query ?? "").trim();
+    const compareWith = String(body.compareWith ?? "").trim() || null;
     if (!query) {
       res.status(400).json({ error: "검색어(기업명·종목코드 또는 티커)를 입력하세요." });
+      return;
+    }
+
+    // ── 캐시 확인 ────────────────────────────────────────────────────────────
+    const cached = await getCached(source, query);
+    if (cached) {
+      res.status(200).json({ ...cached, sankey: null, groundingQueries: [], source, query });
       return;
     }
 
@@ -343,6 +456,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // ── 비교 기업 데이터 수집 (병렬, soft-fail) ─────────────────────────────
+    let compareChartData: FinancialChartData | null = null;
+    if (compareWith) {
+      try {
+        if (source === "dart") {
+          const dartKey = process.env.DART_API_KEY?.trim();
+          if (dartKey) {
+            const cmpCorp = await resolveDartCorp(compareWith, dartKey);
+            if (cmpCorp) {
+              const cmpBundle = await fetchDartFinancialBundle(dartKey, cmpCorp);
+              compareChartData = bundleToChartData(cmpBundle);
+            }
+          }
+        } else {
+          const cmpCompany = await resolveEdgarCik(compareWith);
+          if (cmpCompany) {
+            const cmpFinancials = await fetchEdgarFinancials(cmpCompany.cik);
+            if (cmpFinancials) compareChartData = cmpFinancials;
+          }
+        }
+      } catch (e) {
+        console.warn("[analyze compare]", e instanceof Error ? e.message : e);
+      }
+    }
+
     const client = new OpenAI({ apiKey });
 
     try {
@@ -389,34 +527,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         reportMarkdown += `\n\n---\n*AI 해설이 짧아 보조 생성을 한 단계 더 거쳤습니다.*\n`;
       }
 
+      const { headline, rest: cleanReport } = extractHeadline(reportMarkdown);
+      reportMarkdown = cleanReport;
+
       if (dartTablesMarkdown) {
         reportMarkdown = `${dartTablesMarkdown}\n\n---\n\n## AI 해설 노트\n\n${reportMarkdown}`;
       }
 
-      // ── 퀴즈 생성 (별도 호출) ─────────────────────────────────────────────
+      // ── 퀴즈 + 성찰 + 인사이트 카드 병렬 생성 ───────────────────────────
       let quiz: QuizItem[] = [];
-      try {
-        const quizCompletion = await chatWithRetry(client, {
+      let reflectionPrompts: ReflectionItem[] = [];
+      let insightCards: InsightCards | null = null;
+      const [quizResult, reflectionResult, insightResult] = await Promise.allSettled([
+        chatWithRetry(client, {
           model,
           messages: [{ role: "user", content: buildQuizPrompt(reportMarkdown, query) }],
           max_tokens: 1200,
-        });
-        const quizText = extractMessageText(quizCompletion);
-        quiz = parseQuizBlock(quizText);
-      } catch (e) {
-        console.warn("[analyze quiz gen]", e instanceof Error ? e.message : e);
-        // 퀴즈 생성 실패는 soft fail
+        }),
+        chatWithRetry(client, {
+          model,
+          messages: [{ role: "user", content: buildReflectionPrompt(reportMarkdown, query) }],
+          max_tokens: 600,
+        }),
+        chatWithRetry(client, {
+          model,
+          messages: [{ role: "user", content: buildInsightCardsPrompt(reportMarkdown, query) }],
+          max_tokens: 800,
+        }),
+      ]);
+      if (quizResult.status === "fulfilled") {
+        quiz = parseQuizBlock(extractMessageText(quizResult.value));
+      } else {
+        console.warn("[analyze quiz gen]", quizResult.reason);
       }
+      if (reflectionResult.status === "fulfilled") {
+        reflectionPrompts = parseReflectionBlock(extractMessageText(reflectionResult.value));
+      } else {
+        console.warn("[analyze reflection gen]", reflectionResult.reason);
+      }
+      if (insightResult.status === "fulfilled") {
+        insightCards = parseInsightCards(extractMessageText(insightResult.value));
+      } else {
+        console.warn("[analyze insight cards]", insightResult.reason);
+      }
+
+      const finalModel = usedFallback ? `${model} (fallback)` : model;
+      void setCached(source, query, { reportMarkdown, headline, quiz, reflectionPrompts, sources, model: finalModel, chartData });
 
       res.status(200).json({
         reportMarkdown,
+        headline,
         quiz,
-        reflectionPrompts: [],
+        reflectionPrompts,
+        insightCards,
         sankey: null,
         chartData,
+        compareChartData: compareChartData ?? null,
+        compareWith: compareWith ?? undefined,
         groundingQueries: [],
         sources,
-        model: usedFallback ? `${model} (fallback)` : model,
+        model: finalModel,
         source,
         query,
       });

@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { BarChart3, Users, TrendingUp, Landmark, Droplets, Percent } from "lucide-react";
+import { BarChart3, Users, TrendingUp, Landmark, Droplets, Percent, Activity, TableProperties } from "lucide-react";
 import type { FinancialChartData, FinancialMetric } from "../types";
 
 interface Props {
@@ -463,6 +463,356 @@ function HrMetricsPanel({ data }: { data: FinancialChartData }) {
   );
 }
 
+// ── KPI 카드 헬퍼 ────────────────────────────────────────────────────────────
+
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  const valid = values.filter((v) => isFinite(v));
+  if (valid.length < 2) return null;
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const range = max - min || 1;
+  const n = values.length;
+  const pts = values
+    .map((v, i) => {
+      const x = (i / (n - 1)) * 100;
+      const y = 30 - ((v - min) / range) * 26;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const fillPts = `0,36 ${pts} 100,36`;
+  return (
+    <svg viewBox="0 0 100 36" preserveAspectRatio="none" className="w-full h-9 mt-2">
+      <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+      <polyline fill={`${color}18`} stroke="none" points={fillPts} />
+    </svg>
+  );
+}
+
+function YoyChip({ pct }: { pct: number | null }) {
+  if (pct === null) return null;
+  const up = pct >= 0;
+  return (
+    <span className={`yoy-chip ${up ? "yoy-up" : "yoy-dn"}`}>
+      {up ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
+    </span>
+  );
+}
+
+function yoyPct(current: number | null, prior: number | null): number | null {
+  if (current === null || prior === null || prior === 0) return null;
+  return ((current - prior) / Math.abs(prior)) * 100;
+}
+
+function KpiCard({
+  label,
+  value,
+  yoy,
+  priorYear,
+  sparkValues,
+  sparkColor,
+}: {
+  label: string;
+  value: string;
+  yoy: number | null;
+  priorYear: string;
+  sparkValues: number[];
+  sparkColor: string;
+}) {
+  return (
+    <div className="kpi-card rounded-2xl border border-slate-200/80 bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),_0_24px_40px_-20px_rgba(99,102,241,0.18)] hover:border-indigo-200">
+      <p className="text-[11px] text-slate-500">{label}</p>
+      <p className="mt-1.5 text-[22px] font-bold tabular-nums text-slate-900">{value}</p>
+      <div className="mt-1 flex items-center gap-2 text-[11px]">
+        <YoyChip pct={yoy} />
+        <span className="text-slate-400">YoY · {priorYear}</span>
+      </div>
+      <Sparkline values={sparkValues} color={sparkColor} />
+    </div>
+  );
+}
+
+function KpiSummaryCards({ data }: { data: FinancialChartData }) {
+  const rev = data.metrics.find((m) => ["매출액", "Revenue"].includes(m.label));
+  const op  = data.metrics.find((m) => ["영업이익", "Operating Income"].includes(m.label));
+  const ni  = data.metrics.find((m) => ["당기순이익", "Net Income"].includes(m.label));
+  if (!rev && !op) return null;
+
+  const unit = rev?.unit ?? op?.unit ?? "백만원";
+
+  const opMarginCurrent =
+    rev?.current && op?.current ? (op.current / Math.abs(rev.current)) * 100 : null;
+  const opMarginPrior =
+    rev?.prior && op?.prior ? (op.prior / Math.abs(rev.prior)) * 100 : null;
+  const opMarginPP =
+    rev?.priorPrior && op?.priorPrior ? (op.priorPrior / Math.abs(rev.priorPrior)) * 100 : null;
+
+  const sparkNorm = (vals: (number | null)[]) =>
+    vals.map((v) => (v === null ? 0 : normalizeToBaegmanwon(v)));
+
+  const cards: Array<{
+    label: string;
+    value: string;
+    yoy: number | null;
+    sparkValues: number[];
+    sparkColor: string;
+  }> = [];
+
+  if (rev) {
+    cards.push({
+      label: unit === "USD" ? "Revenue" : "매출액",
+      value: fmtVal(rev.current, unit),
+      yoy: yoyPct(rev.current, rev.prior),
+      sparkValues: sparkNorm([rev.priorPrior, rev.prior, rev.current]),
+      sparkColor: "#16a34a",
+    });
+  }
+  if (op) {
+    cards.push({
+      label: unit === "USD" ? "Operating Income" : "영업이익",
+      value: fmtVal(op.current, unit),
+      yoy: yoyPct(op.current, op.prior),
+      sparkValues: sparkNorm([op.priorPrior, op.prior, op.current]),
+      sparkColor: "#6366f1",
+    });
+  }
+  if (opMarginCurrent !== null) {
+    cards.push({
+      label: unit === "USD" ? "Op. Margin" : "영업이익률",
+      value: `${opMarginCurrent.toFixed(1)}%`,
+      yoy: opMarginPrior !== null ? opMarginCurrent - opMarginPrior : null,
+      sparkValues: [opMarginPP ?? 0, opMarginPrior ?? 0, opMarginCurrent],
+      sparkColor: "#7c3aed",
+    });
+  }
+  if (ni) {
+    cards.push({
+      label: unit === "USD" ? "Net Income" : "당기순이익",
+      value: fmtVal(ni.current, unit),
+      yoy: yoyPct(ni.current, ni.prior),
+      sparkValues: sparkNorm([ni.priorPrior, ni.prior, ni.current]),
+      sparkColor: "#0ea5e9",
+    });
+  }
+
+  if (cards.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      <div className="mb-3 flex items-center gap-2">
+        <h2 className="text-[13px] font-semibold text-slate-700">핵심 지표 — 한눈에</h2>
+        <span className="text-[11px] text-slate-400">YoY 비교 · {data.priorPriorYear}~{data.currentYear}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {cards.map((c) => (
+          <KpiCard
+            key={c.label}
+            label={c.label}
+            value={c.value}
+            yoy={c.yoy}
+            priorYear={data.priorYear}
+            sparkValues={c.sparkValues}
+            sparkColor={c.sparkColor}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── 재무건전성 신호등 ─────────────────────────────────────────────────────────
+
+type Grade = "S" | "A" | "B" | "C" | "D";
+
+const GRADE_BG: Record<Grade, string>   = { S: "bg-emerald-500", A: "bg-green-400",  B: "bg-amber-400",  C: "bg-orange-400", D: "bg-rose-500"  };
+const GRADE_RING: Record<Grade, string> = { S: "ring-emerald-200", A: "ring-green-200", B: "ring-amber-200", C: "ring-orange-200", D: "ring-rose-200" };
+const GRADE_TEXT: Record<Grade, string> = { S: "text-emerald-700", A: "text-green-700",  B: "text-amber-700",  C: "text-orange-700", D: "text-rose-700"  };
+const GRADE_DESC: Record<Grade, string> = { S: "매우 우수", A: "우수", B: "양호", C: "주의", D: "위험" };
+
+function gradeMargin(v: number): Grade {
+  if (v > 20) return "S";
+  if (v > 10) return "A";
+  if (v > 5)  return "B";
+  if (v > 0)  return "C";
+  return "D";
+}
+function gradeDebt(v: number): Grade {
+  if (v < 70)  return "S";
+  if (v < 100) return "A";
+  if (v < 150) return "B";
+  if (v < 200) return "C";
+  return "D";
+}
+function gradeGrowth(v: number): Grade {
+  if (v > 20)  return "S";
+  if (v > 10)  return "A";
+  if (v > 0)   return "B";
+  if (v > -5)  return "C";
+  return "D";
+}
+
+function SignalCard({ label, grade, value, note }: { label: string; grade: Grade; value: string; note: string }) {
+  return (
+    <div className={`flex flex-col items-center rounded-2xl border bg-white p-4 ring-2 ${GRADE_RING[grade]}`}>
+      <div className={`flex h-10 w-10 items-center justify-center rounded-full text-white font-bold text-lg shadow-sm ${GRADE_BG[grade]}`}>
+        {grade}
+      </div>
+      <p className="mt-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{label}</p>
+      <p className={`mt-0.5 text-sm font-bold tabular-nums ${GRADE_TEXT[grade]}`}>{value}</p>
+      <p className="mt-0.5 text-[10px] text-slate-400">{GRADE_DESC[grade]} · {note}</p>
+    </div>
+  );
+}
+
+function HealthSignal({ data }: { data: FinancialChartData }) {
+  const rev   = data.metrics.find((m) => ["매출액", "Revenue"].includes(m.label));
+  const op    = data.metrics.find((m) => ["영업이익", "Operating Income"].includes(m.label));
+  const liab  = data.metrics.find((m) => ["총부채", "Total Liabilities"].includes(m.label));
+  const eq    = data.metrics.find((m) => ["자본총계", "Stockholders Equity", "Total Equity"].includes(m.label));
+
+  const cards: Array<{ label: string; grade: Grade; value: string; note: string }> = [];
+
+  // 수익성: 영업이익률
+  if (rev?.current && op?.current !== null && op?.current !== undefined) {
+    const margin = (op.current / Math.abs(rev.current)) * 100;
+    cards.push({
+      label: "수익성",
+      grade: gradeMargin(margin),
+      value: `영업이익률 ${margin.toFixed(1)}%`,
+      note: ">20% S  >10% A  >5% B",
+    });
+  }
+
+  // 안정성: 부채비율
+  if (liab?.current !== null && liab?.current !== undefined && eq?.current) {
+    const debt = (Math.abs(liab.current) / Math.abs(eq.current)) * 100;
+    cards.push({
+      label: "안정성",
+      grade: gradeDebt(debt),
+      value: `부채비율 ${debt.toFixed(0)}%`,
+      note: "<100% A  <150% B  <200% C",
+    });
+  }
+
+  // 성장성: 매출 YoY
+  if (rev?.current !== null && rev?.current !== undefined && rev?.prior) {
+    const growth = ((rev.current - rev.prior) / Math.abs(rev.prior)) * 100;
+    cards.push({
+      label: "성장성",
+      grade: gradeGrowth(growth),
+      value: `매출 YoY ${growth >= 0 ? "+" : ""}${growth.toFixed(1)}%`,
+      note: ">20% S  >10% A  >0% B",
+    });
+  }
+
+  if (cards.length === 0) return null;
+
+  return (
+    <div>
+      <h4 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+        <Activity className="h-4 w-4 text-indigo-500" />
+        재무건전성 신호등
+        <span className="text-[10px] font-normal text-slate-400">교육 목적 참고용 — 투자 판단 아님</span>
+      </h4>
+      <div className={`grid gap-3 grid-cols-${cards.length} sm:grid-cols-${cards.length}`}>
+        {cards.map((c) => (
+          <SignalCard key={c.label} {...c} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── 인터랙티브 재무제표 표 ────────────────────────────────────────────────────
+
+const CAT_LABEL: Record<string, string> = {
+  income:    "손익",
+  cashflow:  "현금흐름",
+  balance:   "재무상태",
+  hr:        "HR",
+  ratio:     "비율",
+};
+
+function MiniBar({ ratio, negative }: { ratio: number; negative: boolean }) {
+  const w = Math.min(Math.abs(ratio) * 100, 100);
+  return (
+    <div className="relative ml-1 inline-block h-2 w-12 rounded-sm bg-slate-100 align-middle">
+      <div
+        className={`absolute inset-y-0 left-0 rounded-sm ${negative ? "bg-rose-300" : "bg-indigo-300"}`}
+        style={{ width: `${w}%` }}
+      />
+    </div>
+  );
+}
+
+function FinancialTable({ data }: { data: FinancialChartData }) {
+  if (data.metrics.length === 0) return null;
+
+  const categories = Array.from(new Set(data.metrics.map((m) => m.category)));
+
+  return (
+    <div>
+      <h4 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+        <TableProperties className="h-4 w-4 text-slate-500" />
+        재무지표 전체 표
+      </h4>
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="w-full border-collapse text-[12px]">
+          <thead>
+            <tr className="bg-slate-50">
+              <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2.5 text-left font-semibold text-slate-700">지표</th>
+              <th className="px-3 py-2.5 text-right font-semibold text-slate-700">{data.priorPriorYear}</th>
+              <th className="px-3 py-2.5 text-right font-semibold text-slate-700">{data.priorYear}</th>
+              <th className="px-3 py-2.5 text-right font-semibold text-slate-700">{data.currentYear}</th>
+              <th className="px-3 py-2.5 text-right font-semibold text-slate-700">YoY</th>
+            </tr>
+          </thead>
+          <tbody>
+            {categories.map((cat) => {
+              const rows = data.metrics.filter((m) => m.category === cat);
+              const maxAbsCurrent = Math.max(...rows.map((m) => Math.abs(m.current ?? 0)));
+              return [
+                <tr key={`cat-${cat}`}>
+                  <td colSpan={5} className="bg-indigo-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                    {CAT_LABEL[cat] ?? cat}
+                  </td>
+                </tr>,
+                ...rows.map((m, i) => {
+                  const yoy =
+                    m.current !== null && m.prior !== null && m.prior !== 0
+                      ? ((m.current - m.prior) / Math.abs(m.prior)) * 100
+                      : null;
+                  const isNeg = (m.current ?? 0) < 0;
+                  const ratio = maxAbsCurrent > 0 ? Math.abs(m.current ?? 0) / maxAbsCurrent : 0;
+                  return (
+                    <tr key={m.label} className={`border-t border-slate-100 ${i % 2 === 1 ? "bg-slate-50/50" : ""} hover:bg-indigo-50/40`}>
+                      <td className="sticky left-0 bg-inherit px-3 py-2 font-medium text-slate-700">{m.label}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-400">{fmtVal(m.priorPrior, m.unit)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmtVal(m.prior, m.unit)}</td>
+                      <td className={`px-3 py-2 text-right tabular-nums font-semibold ${isNeg ? "text-rose-600" : "text-slate-800"}`}>
+                        {fmtVal(m.current, m.unit)}
+                        <MiniBar ratio={ratio} negative={isNeg} />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {yoy !== null ? (
+                          <span className={`yoy-chip ${yoy >= 0 ? "yoy-up" : "yoy-dn"}`}>
+                            {yoy >= 0 ? "▲" : "▼"} {Math.abs(yoy).toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                }),
+              ];
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 export function FinancialCharts({ chartData }: Props) {
   if (!chartData || chartData.metrics.length === 0) return null;
@@ -482,6 +832,9 @@ export function FinancialCharts({ chartData }: Props) {
         </span>
       </div>
 
+      {/* KPI 요약 카드 */}
+      <KpiSummaryCards data={chartData} />
+
       {/* 손익 + 이익률 */}
       <div className="grid gap-6 lg:grid-cols-2">
         <IncomeChart data={chartData} />
@@ -496,6 +849,12 @@ export function FinancialCharts({ chartData }: Props) {
 
       {/* 수익성·안정성 비율 */}
       <SolvencyRatioChart data={chartData} />
+
+      {/* 재무건전성 신호등 */}
+      <HealthSignal data={chartData} />
+
+      {/* 인터랙티브 재무제표 표 */}
+      <FinancialTable data={chartData} />
 
       {/* HR KPI */}
       <HrMetricsPanel data={chartData} />
