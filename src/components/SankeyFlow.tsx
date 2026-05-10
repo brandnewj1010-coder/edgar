@@ -1,8 +1,11 @@
+import { sankey as createSankey, sankeyLinkHorizontal } from "d3-sankey";
+import type { SankeyNode, SankeyLink } from "d3-sankey";
 import type { FinancialChartData } from "../types";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { GitMerge, PieChart as PieIcon } from "lucide-react";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
-// ── 수치 포맷 ─────────────────────────────────────────────────────────────────
+// ── 포맷 ────────────────────────────────────────────────────────────────────
+
 function fmtShort(v: number, unit: string): string {
   if (unit === "USD") {
     const abs = Math.abs(v);
@@ -18,167 +21,313 @@ function fmtShort(v: number, unit: string): string {
   return `${sign}${Math.round(Math.abs(n)).toLocaleString()}백만`;
 }
 
-// ── SVG Sankey ────────────────────────────────────────────────────────────────
-
-interface SankeyNode {
-  id: string;
-  label: string;
-  value: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  color: string;
+function norm(v: number | null | undefined): number | null {
+  if (v == null) return null;
+  return Math.abs(v) > 10_000_000_000 ? v / 1_000_000 : v;
 }
 
-function buildSankeyNodes(data: FinancialChartData): SankeyNode[] | null {
-  const find = (aliases: string[]) =>
-    data.metrics.find((m) => aliases.includes(m.label));
+// ── d3-sankey 타입 ───────────────────────────────────────────────────────────
 
-  const rev = find(["매출액", "Revenue"]);
-  const op  = find(["영업이익", "Operating Income"]);
-  const ni  = find(["당기순이익", "Net Income"]);
+type RawNode = { nodeId: string; label: string; color: string };
+type RawLink = Record<string, never>;
+type LNode = SankeyNode<RawNode, RawLink> & RawNode;
+type LLink = SankeyLink<RawNode, RawLink>;
 
-  const revV = rev?.current ?? null;
-  const opV  = op?.current  ?? null;
-  const niV  = ni?.current  ?? null;
+const COLORS = {
+  rev:      "#6366f1",
+  cogs:     "#94a3b8",
+  gross:    "#10b981",
+  sga:      "#f59e0b",
+  labor:    "#f59e0b",
+  othersga: "#fbbf24",
+  op:       "#0ea5e9",
+  interest: "#f43f5e",
+  tax:      "#cbd5e1",
+  ni:       "#22c55e",
+  opcost:   "#94a3b8",
+  netloss:  "#ef4444",
+};
 
-  if (revV === null || opV === null) return null;
+// ── 그래프 빌더 ──────────────────────────────────────────────────────────────
 
-  const unit = rev?.unit ?? "백만원";
-  const norm = (v: number) => Math.abs(v) > 10_000_000_000 ? v / 1_000_000 : v;
+function buildGraph(data: FinancialChartData) {
+  const find = (labels: string[]): number | null => {
+    for (const label of labels) {
+      const m = data.metrics.find((x) => x.label === label);
+      if (m?.current != null) return norm(m.current);
+    }
+    return null;
+  };
 
-  const R  = Math.abs(norm(revV));
-  const O  = norm(opV);
-  const N  = niV !== null ? norm(niV) : null;
-  const OC = R - Math.max(O, 0);         // 영업비용 (always positive)
-  const TAX = N !== null ? Math.max(O, 0) - Math.max(N, 0) : null;
+  const rev      = find(["매출액", "Revenue"]);
+  const gross    = find(["매출총이익", "Gross Profit"]);
+  const op       = find(["영업이익", "Operating Income"]);
+  const ni       = find(["당기순이익", "Net Income"]);
+  const interest = find(["이자비용", "Interest Expense", "Labor & Related Expense"]);
 
-  const SVG_H = 240;
-  const COL_W = 88;
-  const GAP   = 64;
-  const totalCols = TAX !== null ? 3 : 2;
-  const SVG_W = totalCols * COL_W + (totalCols - 1) * GAP + 40;
+  if (rev == null || rev <= 0) return null;
 
-  const TOP = 14;
-  const scale = (v: number) => Math.max(6, (Math.abs(v) / R) * (SVG_H - TOP * 2));
+  const unit = data.metrics.find((m) =>
+    ["매출액", "Revenue"].includes(m.label),
+  )?.unit ?? "백만원";
 
-  const nodes: SankeyNode[] = [];
-  let curX = 20;
+  const rawNodes: RawNode[] = [];
+  const rawLinks: { source: number; target: number; value: number }[] = [];
 
-  // 매출 (col 0) — full bar
-  nodes.push({ id: "rev", label: "매출액", value: R, x: curX, y: TOP, w: COL_W, h: scale(R), color: "#6366f1" });
-  curX += COL_W + GAP;
+  const addNode = (nodeId: string, label: string, color: string) => {
+    rawNodes.push({ nodeId, label, color });
+    return rawNodes.length - 1;
+  };
+  const addLink = (src: number, tgt: number, value: number) => {
+    if (value > 0.001) rawLinks.push({ source: src, target: tgt, value });
+  };
 
-  // 영업이익 + 영업비용 (col 1) — stacked, no gap
-  const opH = scale(Math.max(O, 0));
-  const ocH = scale(OC);
-  const opY = TOP;
-  const ocY = opY + opH;   // flush, no gap
-  nodes.push({ id: "op", label: O >= 0 ? "영업이익" : "영업손실", value: O, x: curX, y: opY, w: COL_W, h: opH, color: O >= 0 ? "#10b981" : "#ef4444" });
-  nodes.push({ id: "oc", label: "영업비용", value: OC, x: curX, y: ocY, w: COL_W, h: ocH, color: "#94a3b8" });
-  curX += COL_W + GAP;
+  // ── 매출액 (루트) ─────────────────────────────────────────────────────────
+  const iRev = addNode("rev", `매출액\n${fmtShort(rev, unit)}`, COLORS.rev);
 
-  // 순이익 + 세금 (col 2, optional) — stacked, no gap
-  if (TAX !== null && N !== null) {
-    const niH  = scale(Math.max(N, 0));
-    const taxH = scale(Math.max(TAX, 0));
-    const niY  = TOP;
-    const txY  = niY + niH;  // flush, no gap
-    nodes.push({ id: "ni",  label: N >= 0 ? "당기순이익" : "당기순손실", value: N,   x: curX, y: niY, w: COL_W, h: niH,  color: N >= 0 ? "#0ea5e9" : "#f43f5e" });
-    nodes.push({ id: "tax", label: "세금·기타", value: TAX, x: curX, y: txY, w: COL_W, h: taxH, color: "#cbd5e1" });
+  // ── 매출원가 / 매출총이익 분기 ───────────────────────────────────────────
+  if (gross != null && gross > 0 && gross < rev) {
+    const cogs = rev - gross;
+    const iCogs  = addNode("cogs",  `매출원가\n${fmtShort(cogs, unit)}`,  COLORS.cogs);
+    const iGross = addNode("gross", `매출총이익\n${fmtShort(gross, unit)}`, COLORS.gross);
+    addLink(iRev, iCogs,  cogs);
+    addLink(iRev, iGross, gross);
+
+    // ── 매출총이익 → 판관비 + 영업이익 ─────────────────────────────────
+    if (op != null) {
+      if (op >= 0 && op < gross) {
+        const sgaTotal = gross - op;
+
+        // 인건비 분리 (hrMetrics)
+        const hrC = data.hrMetrics;
+        const laborAmt = hrC?.avgSalaryMillion != null && hrC?.headcount != null
+          ? hrC.avgSalaryMillion * hrC.headcount
+          : null;
+
+        if (laborAmt != null && laborAmt > 0 && laborAmt < sgaTotal) {
+          const iLabor    = addNode("labor",    `인건비\n${fmtShort(laborAmt, unit)}`,            COLORS.labor);
+          const iOtherSga = addNode("othersga", `기타판관비\n${fmtShort(sgaTotal - laborAmt, unit)}`, COLORS.othersga);
+          addLink(iGross, iLabor,    laborAmt);
+          addLink(iGross, iOtherSga, sgaTotal - laborAmt);
+        } else {
+          const iSga = addNode("sga", `판매비와관리비\n${fmtShort(sgaTotal, unit)}`, COLORS.sga);
+          addLink(iGross, iSga, sgaTotal);
+        }
+
+        const iOp = addNode("op", `영업이익\n${fmtShort(op, unit)}`, COLORS.op);
+        addLink(iGross, iOp, op);
+
+        // ── 영업이익 → 법인세·이자 + 순이익 ────────────────────────
+        if (ni != null && ni > 0 && ni <= op) {
+          const intAmt  = interest != null && interest > 0 ? Math.min(interest, op - ni) : 0;
+          const taxAmt  = Math.max(0, op - ni - intAmt);
+          const iNi = addNode("ni", `당기순이익\n${fmtShort(ni, unit)}`, COLORS.ni);
+
+          if (intAmt > 0) {
+            const iInt = addNode("interest", `이자비용\n${fmtShort(intAmt, unit)}`, COLORS.interest);
+            addLink(iOp, iInt, intAmt);
+          }
+          if (taxAmt > 0) {
+            const iTax = addNode("tax", `법인세·기타\n${fmtShort(taxAmt, unit)}`, COLORS.tax);
+            addLink(iOp, iTax, taxAmt);
+          }
+          addLink(iOp, iNi, ni);
+        }
+      } else if (op < 0) {
+        // 영업손실: 매출총이익 전체가 비용
+        const iOpcost = addNode("opcost", `영업비용\n${fmtShort(gross, unit)}`, COLORS.opcost);
+        addLink(iGross, iOpcost, gross);
+      }
+    }
+  } else if (op != null && op >= 0) {
+    // 매출총이익 없음: 매출 → 영업비용 + 영업이익
+    const opcost = rev - op;
+    if (opcost > 0) {
+      const iOpcost = addNode("opcost", `영업비용\n${fmtShort(opcost, unit)}`, COLORS.opcost);
+      addLink(iRev, iOpcost, opcost);
+    }
+    const iOp = addNode("op", `영업이익\n${fmtShort(op, unit)}`, COLORS.op);
+    addLink(iRev, iOp, op);
+
+    if (ni != null && ni > 0 && ni <= op) {
+      const taxAmt = op - ni;
+      const iNi = addNode("ni", `당기순이익\n${fmtShort(ni, unit)}`, COLORS.ni);
+      if (taxAmt > 0) {
+        const iTax = addNode("tax", `법인세·기타\n${fmtShort(taxAmt, unit)}`, COLORS.tax);
+        addLink(iOp, iTax, taxAmt);
+      }
+      addLink(iOp, iNi, ni);
+    }
+  } else {
+    // 매출총이익도 없고 영업이익도 없거나 음수 → 최소 표시
+    return null;
   }
 
-  void unit; // suppress unused warning
-  return nodes;
+  if (rawNodes.length < 2 || rawLinks.length === 0) return null;
+  return { nodes: rawNodes, links: rawLinks, unit };
 }
 
-function SankeyBar({ node, unit }: { node: SankeyNode; unit: string }) {
-  return (
-    <g>
-      <rect x={node.x} y={node.y} width={node.w} height={Math.max(node.h, 1)} rx={3} fill={node.color} opacity={0.88} />
-      <text x={node.x + node.w / 2} y={node.y - 4} textAnchor="middle" fontSize={9} fill="#64748b">
-        {node.label}
-      </text>
-      {node.h > 18 && (
-        <text x={node.x + node.w / 2} y={node.y + node.h / 2 + 4} textAnchor="middle" fontSize={9} fontWeight="bold" fill="#fff">
-          {fmtShort(node.value, unit)}
-        </text>
-      )}
-    </g>
-  );
-}
+// ── SVG Sankey 컴포넌트 ──────────────────────────────────────────────────────
+
+const SVG_W = 580;
+const SVG_H = 300;
+const NODE_WIDTH = 14;
+const NODE_PAD   = 16;
 
 function SankeyDiagram({ data }: { data: FinancialChartData }) {
-  const nodes = buildSankeyNodes(data);
-  if (!nodes || nodes.length === 0) return null;
+  const graph = buildGraph(data);
+  if (!graph) return (
+    <div className="flex items-center justify-center py-10 text-sm text-slate-400">
+      재무 데이터가 충분하지 않아 Sankey를 그릴 수 없습니다.
+    </div>
+  );
 
-  const unit = data.metrics.find((m) => ["매출액", "Revenue"].includes(m.label))?.unit ?? "백만원";
-  const maxX  = Math.max(...nodes.map((n) => n.x + n.w)) + 20;
-  const maxY  = Math.max(...nodes.map((n) => n.y + n.h)) + 20;
+  const { nodes: rawNodes, links: rawLinks, unit } = graph;
 
-  const rev  = nodes.find((n) => n.id === "rev");
-  const op   = nodes.find((n) => n.id === "op");
-  const oc   = nodes.find((n) => n.id === "oc");
-  const ni   = nodes.find((n) => n.id === "ni");
-  const tax  = nodes.find((n) => n.id === "tax");
+  const layout = createSankey<RawNode, RawLink>()
+    .nodeId((d) => (d as RawNode).nodeId)
+    .nodeWidth(NODE_WIDTH)
+    .nodePadding(NODE_PAD)
+    .extent([[6, 10], [SVG_W - 6, SVG_H - 10]]);
 
-  function ribbon(x1: number, y1: number, h1: number, x2: number, y2: number, h2: number, color: string, opacity = 0.18) {
-    const mx = (x1 + x2) / 2;
-    return (
-      <path
-        d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}
-           L${x2},${y2 + h2} C${mx},${y2 + h2} ${mx},${y1 + h1} ${x1},${y1 + h1} Z`}
-        fill={color}
-        opacity={opacity}
-      />
-    );
-  }
+  const { nodes, links } = layout({
+    nodes: rawNodes.map((d) => ({ ...d })),
+    links: rawLinks.map((d) => ({ ...d })),
+  });
+
+  const linkPath = sankeyLinkHorizontal<RawNode, RawLink>();
 
   return (
-    <svg viewBox={`0 0 ${maxX} ${maxY}`} className="w-full" style={{ maxHeight: 280 }}>
-      {rev && op  && ribbon(rev.x + rev.w, op.y,  op.h,  op.x,  op.y,  op.h,  "#10b981", 0.16)}
-      {rev && oc  && ribbon(rev.x + rev.w, oc.y,  oc.h,  oc.x,  oc.y,  oc.h,  "#94a3b8", 0.13)}
-      {op  && ni  && ribbon(op.x  + op.w,  ni.y,  ni.h,  ni.x,  ni.y,  ni.h,  "#0ea5e9", 0.16)}
-      {op  && tax && ribbon(op.x  + op.w,  tax.y, tax.h, tax.x, tax.y, tax.h, "#cbd5e1", 0.13)}
-      {nodes.map((n) => <SankeyBar key={n.id} node={n} unit={unit} />)}
+    <svg
+      viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+      className="w-full"
+      style={{ maxHeight: 340 }}
+    >
+      <defs>
+        {links.map((link, i) => {
+          const src = link.source as LNode;
+          const tgt = link.target as LNode;
+          return (
+            <linearGradient key={i} id={`sg-${i}`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stopColor={src.color} stopOpacity={0.55} />
+              <stop offset="100%" stopColor={tgt.color} stopOpacity={0.40} />
+            </linearGradient>
+          );
+        })}
+      </defs>
+
+      {/* 링크 (베지어 리본) */}
+      {links.map((link, i) => (
+        <path
+          key={i}
+          d={linkPath(link as LLink) ?? ""}
+          fill="none"
+          stroke={`url(#sg-${i})`}
+          strokeWidth={Math.max(1.5, (link as LLink).width ?? 1)}
+          opacity={0.75}
+        />
+      ))}
+
+      {/* 노드 */}
+      {(nodes as LNode[]).map((node, i) => {
+        const x0 = node.x0 ?? 0;
+        const x1 = node.x1 ?? 0;
+        const y0 = node.y0 ?? 0;
+        const y1 = node.y1 ?? 0;
+        const h  = Math.max(2, y1 - y0);
+        const cy = (y0 + y1) / 2;
+
+        const isLeft = x0 < SVG_W / 2;
+        const lx = isLeft ? x1 + 5 : x0 - 5;
+        const anchor = isLeft ? "start" : "end";
+
+        // label / value from node.label (multiline stored as \n)
+        const [labelText, valueText] = node.label.split("\n");
+
+        return (
+          <g key={i}>
+            <rect
+              x={x0} y={y0}
+              width={x1 - x0}
+              height={h}
+              fill={node.color}
+              rx={3}
+            />
+            <text
+              x={lx}
+              y={cy - (valueText ? 5 : 0)}
+              textAnchor={anchor}
+              fontSize={9.5}
+              fontWeight="600"
+              fill="#334155"
+              style={{ userSelect: "none" }}
+            >
+              {labelText}
+            </text>
+            {valueText && (
+              <text
+                x={lx}
+                y={cy + 7}
+                textAnchor={anchor}
+                fontSize={8.5}
+                fill="#64748b"
+                style={{ userSelect: "none" }}
+              >
+                {valueText}
+              </text>
+            )}
+          </g>
+        );
+      })}
     </svg>
   );
 }
 
-// ── 카테고리별 파이차트 ───────────────────────────────────────────────────────
+// ── 카테고리 파이차트 ────────────────────────────────────────────────────────
 
-const PIE_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#0ea5e9", "#f43f5e", "#8b5cf6", "#06b6d4", "#84cc16"];
+const PIE_COLORS = ["#94a3b8", "#22c55e", "#f59e0b", "#0ea5e9", "#f43f5e", "#8b5cf6"];
 
 function CategoryPie({ data }: { data: FinancialChartData }) {
-  const find = (aliases: string[]) =>
-    data.metrics.find((m) => aliases.includes(m.label));
-
-  const rev = find(["매출액", "Revenue"]);
-  const op  = find(["영업이익", "Operating Income"]);
-  const ni  = find(["당기순이익", "Net Income"]);
-
-  if (!rev?.current) return null;
-
-  const unit = rev.unit ?? "백만원";
-  const norm = (v: number | null) => {
-    if (v === null) return null;
-    return Math.abs(v) > 10_000_000_000 ? v / 1_000_000 : v;
+  const find = (labels: string[]) => {
+    for (const label of labels) {
+      const m = data.metrics.find((x) => x.label === label);
+      if (m?.current != null) return norm(m.current);
+    }
+    return null;
   };
 
-  const R  = Math.abs(norm(rev.current) ?? 0);
-  const O  = norm(op?.current ?? null);
-  const N  = norm(ni?.current ?? null);
-  const OC = O !== null ? R - Math.abs(O) : null;
-  const TAX = O !== null && N !== null ? Math.abs(O) - Math.abs(N) : null;
+  const rev   = find(["매출액", "Revenue"]);
+  const gross = find(["매출총이익", "Gross Profit"]);
+  const op    = find(["영업이익", "Operating Income"]);
+  const ni    = find(["당기순이익", "Net Income"]);
+  const unit  = data.metrics.find((m) => ["매출액", "Revenue"].includes(m.label))?.unit ?? "백만원";
 
+  if (!rev || rev <= 0) return null;
+
+  const R    = Math.abs(rev);
   const segments: Array<{ name: string; value: number }> = [];
-  if (N !== null && N > 0)     segments.push({ name: "당기순이익", value: Math.abs(N) });
-  if (TAX !== null && TAX > 0) segments.push({ name: "세금·기타",  value: TAX });
-  if (OC  !== null && OC > 0)  segments.push({ name: "영업비용",   value: OC });
+
+  if (gross != null && gross > 0) {
+    const cogs = R - Math.abs(gross);
+    if (cogs > 0)   segments.push({ name: "매출원가", value: cogs });
+    if (op != null && op >= 0) {
+      const sga = Math.abs(gross) - op;
+      if (sga > 0)  segments.push({ name: "판관비", value: sga });
+      if (ni != null && ni >= 0) {
+        const tax = op - Math.abs(ni);
+        if (tax > 0) segments.push({ name: "법인세·기타", value: tax });
+        if (ni > 0)  segments.push({ name: "당기순이익", value: Math.abs(ni) });
+      } else {
+        if (op > 0)  segments.push({ name: "영업이익", value: op });
+      }
+    }
+  } else if (op != null && op >= 0) {
+    const opcost = R - op;
+    if (opcost > 0) segments.push({ name: "영업비용", value: opcost });
+    if (op > 0)     segments.push({ name: "영업이익", value: op });
+  }
 
   if (segments.length < 2) return null;
-
   const total = segments.reduce((s, d) => s + d.value, 0);
 
   function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ name: string; value: number }> }) {
@@ -200,9 +349,17 @@ function CategoryPie({ data }: { data: FinancialChartData }) {
       </h4>
       <ResponsiveContainer width="100%" height={200}>
         <PieChart>
-          <Pie data={segments} cx="50%" cy="50%" outerRadius={72} innerRadius={36} dataKey="value"
-            label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
-            labelLine={false} fontSize={11}>
+          <Pie
+            data={segments}
+            cx="50%" cy="50%"
+            outerRadius={72} innerRadius={36}
+            dataKey="value"
+            label={({ name, percent }: { name: string; percent: number }) =>
+              `${name} ${(percent * 100).toFixed(0)}%`
+            }
+            labelLine={false}
+            fontSize={11}
+          >
             {segments.map((_, i) => (
               <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
             ))}
@@ -216,8 +373,9 @@ function CategoryPie({ data }: { data: FinancialChartData }) {
 }
 
 // ── 메인 ─────────────────────────────────────────────────────────────────────
+
 export function SankeyFlow({ data }: { data: FinancialChartData }) {
-  const hasRev = data.metrics.some((m) => ["매출액", "Revenue"].includes(m.label));
+  const hasRev = data.metrics.some((m) => ["매출액", "Revenue"].includes(m.label) && m.current != null);
   if (!hasRev) return null;
 
   return (
@@ -227,8 +385,10 @@ export function SankeyFlow({ data }: { data: FinancialChartData }) {
           <GitMerge className="h-4 w-4" />
         </div>
         <div>
-          <h3 className="text-base font-semibold text-slate-900">손익 흐름도</h3>
-          <p className="text-xs text-slate-400">{data.corp} · {data.currentYear}년 매출 → 비용 → 이익 분해</p>
+          <h3 className="text-base font-semibold text-slate-900">매출 → 비용 → 이익 흐름</h3>
+          <p className="text-xs text-slate-400">
+            {data.corp} · {data.currentYear}년 · 노드 두께 = 금액 비례
+          </p>
         </div>
       </div>
 
@@ -236,14 +396,16 @@ export function SankeyFlow({ data }: { data: FinancialChartData }) {
         <div>
           <h4 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
             <GitMerge className="h-4 w-4 text-indigo-400" />
-            손익 Sankey
+            자금 흐름 Sankey
           </h4>
           <SankeyDiagram data={data} />
         </div>
         <CategoryPie data={data} />
       </div>
 
-      <p className="text-[10px] text-slate-400">* 교육용 시각화. 영업비용·세금은 매출·영업이익·순이익으로부터 역산한 추정치입니다.</p>
+      <p className="text-[10px] text-slate-400">
+        * 교육용 시각화. 매출원가·판관비·세금은 매출·영업이익·순이익으로부터 역산한 추정치입니다.
+      </p>
     </div>
   );
 }
