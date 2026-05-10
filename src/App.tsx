@@ -17,6 +17,7 @@ import type { AnalyzeResponse, DisclosureSource, QuizItem } from "./types";
 import { ReportDocument } from "./components/ReportDocument";
 import { ReportActions } from "./components/ReportActions";
 import { ComparisonCharts } from "./components/ComparisonCharts";
+import { InsightCards } from "./components/InsightCards";
 
 type PageView = "report" | "notes" | "study";
 
@@ -415,6 +416,13 @@ export default function App() {
                 </div>
 
                 <ReportActions reportMarkdown={result.reportMarkdown} />
+
+                {/* AI 인사이트 카드 */}
+                {result.insightCards && (
+                  <div className="mt-5">
+                    <InsightCards cards={result.insightCards} />
+                  </div>
+                )}
 
                 <div className="mt-4">
                   <ReportDocument>
