@@ -23,6 +23,7 @@ type DartApiEnvelope = {
 export type FnlttRow = {
   sj_div?: string;
   sj_nm?: string;
+  account_id?: string;   // IFRS 표준 코드 (ifrs-full_Revenue 등)
   account_nm?: string;
   thstrm_amount?: string;
   frmtrm_amount?: string;
@@ -448,10 +449,14 @@ const RE_CORE_ACCOUNT =
 const RE_LABOR_ACCOUNT =
   /급여|퇴직|임원|보수|복리후생|사외이사|스톡|주식보상|상여|퇴직급여|연금|인건비|판매비와관리비|경상연구개발|판매비|관리비/;
 
+const RE_CORE_IDS =
+  /revenue|profit|equity|assets|liabilities|cashflow|financing|investing|operating|interest/i;
+
 function accountStudyScore(r: FnlttRow): number {
   const nm = (r.account_nm || "").replace(/\s/g, "");
+  const id = r.account_id || "";
   let s = 0;
-  if (RE_CORE_ACCOUNT.test(nm)) s += 4;
+  if (RE_CORE_ACCOUNT.test(nm) || RE_CORE_IDS.test(id)) s += 4;
   if (RE_LABOR_ACCOUNT.test(nm)) s += 3;
   return s;
 }
@@ -711,9 +716,22 @@ function findAmount(rows: FnlttRow[], patterns: RegExp[]): number | null {
 
 function findAmountTriple(
   rows: FnlttRow[],
-  patterns: RegExp[],
+  accountIds: string[],
+  namePatterns: RegExp[],
 ): [number | null, number | null, number | null] {
-  for (const pat of patterns) {
+  // 1차: IFRS 표준 account_id로 정확 매칭 (회사·계정명 무관)
+  for (const id of accountIds) {
+    for (const r of rows) {
+      if ((r.account_id || "").trim() === id) {
+        const v = parseAmount(r.thstrm_amount);
+        if (v !== null) {
+          return [v, parseAmount(r.frmtrm_amount), parseAmount(r.bfefrmtrm_amount)];
+        }
+      }
+    }
+  }
+  // 2차: account_id 없거나 불일치 시 계정명 패턴으로 폴백
+  for (const pat of namePatterns) {
     for (const r of rows) {
       const nm = (r.account_nm || "").replace(/\s/g, "");
       if (pat.test(nm)) {
@@ -739,94 +757,143 @@ export function bundleToChartData(b: DartBundle): FinancialChartData {
   const priorPriorYear = String(parseInt(year) - 2);
 
   // --- 주요 손익 ---
+  // accountIds: IFRS 표준 코드 (1차), namePatterns: 계정명 폴백 (2차)
   const KEY_METRICS: Array<{
     label: string;
-    patterns: RegExp[];
+    accountIds: string[];
+    namePatterns: RegExp[];
     category: FinancialMetric["category"];
     unit: string;
   }> = [
     {
       label: "매출액",
-      patterns: [/^매출액$/, /^수익\(매출액\)$/, /^영업수익$/, /매출액/],
+      accountIds: [
+        "ifrs-full_Revenue",
+        "ifrs-full_RevenueFromContractsWithCustomers",
+        "dart_Revenue",
+        "ifrs-full_OperatingRevenue",
+      ],
+      namePatterns: [/^매출액$/, /^수익\(매출액\)$/, /^영업수익$/, /매출액/],
       category: "income",
       unit: "백만원",
     },
     {
       label: "매출총이익",
-      patterns: [/^매출총이익$/, /매출총이익/],
+      accountIds: ["ifrs-full_GrossProfit"],
+      namePatterns: [/^매출총이익$/],
       category: "income",
       unit: "백만원",
     },
     {
       label: "영업이익",
-      patterns: [/^영업이익$/, /^영업이익\(손실\)$/, /^영업손익$/],
+      accountIds: [
+        "ifrs-full_ProfitLossFromOperatingActivities",
+        "dart_OperatingIncomeLoss",
+        "ifrs-full_OperatingProfit",
+      ],
+      namePatterns: [/^영업이익$/, /^영업이익\(손실\)$/, /^영업손익$/],
       category: "income",
       unit: "백만원",
     },
     {
       label: "당기순이익",
-      patterns: [/^당기순이익$/, /^당기순이익\(손실\)$/, /^분기순이익$/],
+      accountIds: [
+        "ifrs-full_ProfitLoss",
+        "ifrs-full_ProfitLossAttributableToOwnersOfParent",
+      ],
+      namePatterns: [/^당기순이익$/, /^당기순이익\(손실\)$/, /^분기순이익$/],
       category: "income",
       unit: "백만원",
     },
     {
       label: "이자비용",
-      patterns: [/^이자비용$/, /^금융비용$/, /이자비용/],
+      accountIds: [
+        "ifrs-full_FinanceCosts",
+        "ifrs-full_InterestExpense",
+        "dart_InterestExpense",
+      ],
+      namePatterns: [/^이자비용$/, /^금융비용$/, /이자비용/],
       category: "income",
       unit: "백만원",
     },
     {
       label: "영업활동현금흐름",
-      patterns: [/^영업활동.*현금흐름$/, /영업활동으로인한현금흐름/],
+      accountIds: [
+        "ifrs-full_CashFlowsFromUsedInOperatingActivities",
+        "ifrs-full_CashFlowsFromOperatingActivities",
+      ],
+      namePatterns: [/^영업활동.*현금흐름$/, /영업활동으로인한현금흐름/],
       category: "cashflow",
       unit: "백만원",
     },
     {
       label: "투자활동현금흐름",
-      patterns: [/^투자활동.*현금흐름$/, /투자활동으로인한현금흐름/],
+      accountIds: [
+        "ifrs-full_CashFlowsFromUsedInInvestingActivities",
+        "ifrs-full_CashFlowsFromInvestingActivities",
+      ],
+      namePatterns: [/^투자활동.*현금흐름$/, /투자활동으로인한현금흐름/],
       category: "cashflow",
       unit: "백만원",
     },
     {
       label: "재무활동현금흐름",
-      patterns: [/^재무활동.*현금흐름$/, /재무활동으로인한현금흐름/],
+      accountIds: [
+        "ifrs-full_CashFlowsFromUsedInFinancingActivities",
+        "ifrs-full_CashFlowsFromFinancingActivities",
+      ],
+      namePatterns: [/^재무활동.*현금흐름$/, /재무활동으로인한현금흐름/],
       category: "cashflow",
       unit: "백만원",
     },
     {
       label: "총자산",
-      patterns: [/^자산총계$/, /^총자산$/],
+      accountIds: ["ifrs-full_Assets"],
+      namePatterns: [/^자산총계$/, /^총자산$/],
       category: "balance",
       unit: "백만원",
     },
     {
       label: "총부채",
-      patterns: [/^부채총계$/, /^총부채$/],
+      accountIds: ["ifrs-full_Liabilities"],
+      namePatterns: [/^부채총계$/, /^총부채$/],
       category: "balance",
       unit: "백만원",
     },
     {
       label: "자본총계",
-      patterns: [/^자본총계$/, /^자기자본$/],
+      accountIds: [
+        "ifrs-full_Equity",
+        "ifrs-full_EquityAttributableToOwnersOfParent",
+      ],
+      namePatterns: [/^자본총계$/, /^자기자본$/],
       category: "balance",
       unit: "백만원",
     },
     {
       label: "단기차입금",
-      patterns: [/^단기차입금$/, /단기차입금/],
+      accountIds: [
+        "ifrs-full_ShorttermBorrowings",
+        "ifrs-full_CurrentBorrowings",
+      ],
+      namePatterns: [/^단기차입금$/, /단기차입금/],
       category: "balance",
       unit: "백만원",
     },
     {
       label: "장기차입금",
-      patterns: [/^장기차입금$/, /장기차입금/],
+      accountIds: [
+        "ifrs-full_NoncurrentBorrowings",
+        "ifrs-full_LongtermBorrowingsClassifiedAsNoncurrent",
+      ],
+      namePatterns: [/^장기차입금$/, /장기차입금/],
       category: "balance",
       unit: "백만원",
     },
   ];
 
   const metrics: FinancialMetric[] = KEY_METRICS.map((m) => {
-    const [c, p, pp] = findAmountTriple(rows, m.patterns);
+    const [c, p, pp] = findAmountTriple(rows, m.accountIds, m.namePatterns);
     return {
       label: m.label,
       current: c,
