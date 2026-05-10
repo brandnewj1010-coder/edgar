@@ -16,6 +16,7 @@ import { isSupabaseConfigured } from "./lib/supabase";
 import type { AnalyzeResponse, DisclosureSource, QuizItem } from "./types";
 import { ReportDocument } from "./components/ReportDocument";
 import { ReportActions } from "./components/ReportActions";
+import { ComparisonCharts } from "./components/ComparisonCharts";
 
 type PageView = "report" | "notes" | "study";
 
@@ -78,6 +79,7 @@ export default function App() {
   const [demoMode, setDemoMode] = useState(
     () => import.meta.env.VITE_USE_DEMO === "1",
   );
+  const [compareWith, setCompareWith] = useState("");
   // 해설노트 탭 — 새 결과가 왔는데 아직 안 봤을 때 뱃지
   const [notesSeen, setNotesSeen] = useState(true);
   // 스터디 페이지로 넘길 퀴즈
@@ -97,7 +99,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const data = await requestAnalyze(source, q, { demo: demoMode });
+      const data = await requestAnalyze(source, q, { demo: demoMode, compareWith: compareWith.trim() || undefined });
       setResult(data);
       setNotesSeen(false); // 새 결과 → 해설노트 탭에 뱃지
       await saveReport(data);
@@ -159,6 +161,8 @@ export default function App() {
           onSource={setSource}
           query={query}
           onQuery={setQuery}
+          compareWith={compareWith}
+          onCompareWith={setCompareWith}
           onSubmit={run}
           loading={loading}
           recent={recent}
@@ -359,6 +363,16 @@ export default function App() {
                 ) : (
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 px-6 py-12 text-center text-sm text-slate-400">
                     구조화된 재무 데이터가 없습니다. 해설노트에서 AI 분석을 확인하세요.
+                  </div>
+                )}
+
+                {/* 비교 차트 */}
+                {result.chartData && result.compareChartData && (
+                  <ComparisonCharts main={result.chartData} compare={result.compareChartData} />
+                )}
+                {result.compareWith && !result.compareChartData && (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-700">
+                    비교 기업 <strong>{result.compareWith}</strong> 데이터를 가져오지 못했습니다. 정확한 기업명·코드인지 확인해 보세요.
                   </div>
                 )}
               </div>

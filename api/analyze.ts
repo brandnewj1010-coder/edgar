@@ -20,7 +20,7 @@ import type { QuizItem, ReflectionItem, FinancialChartData } from "../src/types.
 export const config = { maxDuration: 60 };
 
 type Source = "dart" | "edgar";
-type Body = { source?: string; query?: string };
+type Body = { source?: string; query?: string; compareWith?: string };
 
 const MIN_REPORT_CHARS = 180;
 
@@ -333,6 +333,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const source = body.source === "edgar" ? "edgar" : "dart";
     const query = String(body.query ?? "").trim();
+    const compareWith = String(body.compareWith ?? "").trim() || null;
     if (!query) {
       res.status(400).json({ error: "검색어(기업명·종목코드 또는 티커)를 입력하세요." });
       return;
@@ -404,6 +405,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (e) {
         console.warn("[analyze edgar]", e instanceof Error ? e.message : e);
         // EDGAR 실패는 soft fail — OpenAI only로 계속
+      }
+    }
+
+    // ── 비교 기업 데이터 수집 (병렬, soft-fail) ─────────────────────────────
+    let compareChartData: FinancialChartData | null = null;
+    if (compareWith) {
+      try {
+        if (source === "dart") {
+          const dartKey = process.env.DART_API_KEY?.trim();
+          if (dartKey) {
+            const cmpCorp = await resolveDartCorp(compareWith, dartKey);
+            if (cmpCorp) {
+              const cmpBundle = await fetchDartFinancialBundle(dartKey, cmpCorp);
+              compareChartData = bundleToChartData(cmpBundle);
+            }
+          }
+        } else {
+          const cmpCompany = await resolveEdgarCik(compareWith);
+          if (cmpCompany) {
+            const cmpFinancials = await fetchEdgarFinancials(cmpCompany.cik);
+            if (cmpFinancials) compareChartData = cmpFinancials;
+          }
+        }
+      } catch (e) {
+        console.warn("[analyze compare]", e instanceof Error ? e.message : e);
       }
     }
 
@@ -496,6 +522,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         reflectionPrompts,
         sankey: null,
         chartData,
+        compareChartData: compareChartData ?? null,
+        compareWith: compareWith ?? undefined,
         groundingQueries: [],
         sources,
         model: finalModel,
