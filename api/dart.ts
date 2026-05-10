@@ -174,7 +174,7 @@ const DART_CORP_BY_STOCK: Record<string, DartCorp> = {
   // 게임
   "036570": { corp_code: "00211079", corp_name: "엔씨소프트",        stock_code: "036570" },
   "251270": { corp_code: "01228485", corp_name: "넷마블",             stock_code: "251270" },
-  "263750": { corp_code: "01451948", corp_name: "펄어비스",           stock_code: "263750" },
+  "263750": { corp_code: "01152470", corp_name: "펄어비스",           stock_code: "263750" },
   "112040": { corp_code: "00375525", corp_name: "위메이드",           stock_code: "112040" },
   "078340": { corp_code: "00476498", corp_name: "컴투스",             stock_code: "078340" },
   "293490": { corp_code: "01137383", corp_name: "카카오게임즈",      stock_code: "293490" },
