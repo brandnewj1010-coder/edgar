@@ -72,94 +72,71 @@ function buildGraph(data: FinancialChartData) {
   )?.unit ?? "백만원";
 
   const rawNodes: RawNode[] = [];
-  const rawLinks: { source: number; target: number; value: number }[] = [];
+  const rawLinks: { source: string; target: string; value: number }[] = [];
 
-  const addNode = (nodeId: string, label: string, color: string) => {
+  // addNode는 nodeId(문자열)를 반환 — d3-sankey의 nodeId accessor와 일치해야 함
+  const addNode = (nodeId: string, label: string, color: string): string => {
     rawNodes.push({ nodeId, label, color });
-    return rawNodes.length - 1;
+    return nodeId;
   };
-  const addLink = (src: number, tgt: number, value: number) => {
+  const addLink = (src: string, tgt: string, value: number) => {
     if (value > 0.001) rawLinks.push({ source: src, target: tgt, value });
   };
 
   // ── 매출액 (루트) ─────────────────────────────────────────────────────────
-  const iRev = addNode("rev", `매출액\n${fmtShort(rev, unit)}`, COLORS.rev);
+  const nRev = addNode("rev", `매출액\n${fmtShort(rev, unit)}`, COLORS.rev);
 
   // ── 매출원가 / 매출총이익 분기 ───────────────────────────────────────────
   if (gross != null && gross > 0 && gross < rev) {
     const cogs = rev - gross;
-    const iCogs  = addNode("cogs",  `매출원가\n${fmtShort(cogs, unit)}`,  COLORS.cogs);
-    const iGross = addNode("gross", `매출총이익\n${fmtShort(gross, unit)}`, COLORS.gross);
-    addLink(iRev, iCogs,  cogs);
-    addLink(iRev, iGross, gross);
+    const nCogs  = addNode("cogs",  `매출원가\n${fmtShort(cogs, unit)}`,   COLORS.cogs);
+    const nGross = addNode("gross", `매출총이익\n${fmtShort(gross, unit)}`, COLORS.gross);
+    addLink(nRev, nCogs,  cogs);
+    addLink(nRev, nGross, gross);
 
     // ── 매출총이익 → 판관비 + 영업이익 ─────────────────────────────────
-    if (op != null) {
-      if (op >= 0 && op < gross) {
-        const sgaTotal = gross - op;
+    if (op != null && op >= 0 && op < gross) {
+      const sgaTotal = gross - op;
 
-        // 인건비 분리 (hrMetrics)
-        const hrC = data.hrMetrics;
-        const laborAmt = hrC?.avgSalaryMillion != null && hrC?.headcount != null
-          ? hrC.avgSalaryMillion * hrC.headcount
-          : null;
+      const hrC = data.hrMetrics;
+      const laborAmt = hrC?.avgSalaryMillion != null && hrC?.headcount != null
+        ? hrC.avgSalaryMillion * hrC.headcount : null;
 
-        if (laborAmt != null && laborAmt > 0 && laborAmt < sgaTotal) {
-          const iLabor    = addNode("labor",    `인건비\n${fmtShort(laborAmt, unit)}`,            COLORS.labor);
-          const iOtherSga = addNode("othersga", `기타판관비\n${fmtShort(sgaTotal - laborAmt, unit)}`, COLORS.othersga);
-          addLink(iGross, iLabor,    laborAmt);
-          addLink(iGross, iOtherSga, sgaTotal - laborAmt);
-        } else {
-          const iSga = addNode("sga", `판매비와관리비\n${fmtShort(sgaTotal, unit)}`, COLORS.sga);
-          addLink(iGross, iSga, sgaTotal);
-        }
-
-        const iOp = addNode("op", `영업이익\n${fmtShort(op, unit)}`, COLORS.op);
-        addLink(iGross, iOp, op);
-
-        // ── 영업이익 → 법인세·이자 + 순이익 ────────────────────────
-        if (ni != null && ni > 0 && ni <= op) {
-          const intAmt  = interest != null && interest > 0 ? Math.min(interest, op - ni) : 0;
-          const taxAmt  = Math.max(0, op - ni - intAmt);
-          const iNi = addNode("ni", `당기순이익\n${fmtShort(ni, unit)}`, COLORS.ni);
-
-          if (intAmt > 0) {
-            const iInt = addNode("interest", `이자비용\n${fmtShort(intAmt, unit)}`, COLORS.interest);
-            addLink(iOp, iInt, intAmt);
-          }
-          if (taxAmt > 0) {
-            const iTax = addNode("tax", `법인세·기타\n${fmtShort(taxAmt, unit)}`, COLORS.tax);
-            addLink(iOp, iTax, taxAmt);
-          }
-          addLink(iOp, iNi, ni);
-        }
-      } else if (op < 0) {
-        // 영업손실: 매출총이익 전체가 비용
-        const iOpcost = addNode("opcost", `영업비용\n${fmtShort(gross, unit)}`, COLORS.opcost);
-        addLink(iGross, iOpcost, gross);
+      if (laborAmt != null && laborAmt > 0 && laborAmt < sgaTotal) {
+        addLink(nGross, addNode("labor",    `인건비\n${fmtShort(laborAmt, unit)}`,              COLORS.labor),    laborAmt);
+        addLink(nGross, addNode("othersga", `기타판관비\n${fmtShort(sgaTotal - laborAmt, unit)}`, COLORS.othersga), sgaTotal - laborAmt);
+      } else if (sgaTotal > 0) {
+        addLink(nGross, addNode("sga", `판관비\n${fmtShort(sgaTotal, unit)}`, COLORS.sga), sgaTotal);
       }
+
+      const nOp = addNode("op", `영업이익\n${fmtShort(op, unit)}`, COLORS.op);
+      addLink(nGross, nOp, op);
+
+      // ── 영업이익 분해 (순이익이 영업이익 이하일 때만) ────────────────
+      if (ni != null && ni > 0 && ni < op) {
+        const intAmt = interest != null && interest > 0 ? Math.min(interest, op - ni) : 0;
+        const taxAmt = Math.max(0, op - ni - intAmt);
+        if (intAmt > 0) addLink(nOp, addNode("interest", `이자비용\n${fmtShort(intAmt, unit)}`, COLORS.interest), intAmt);
+        if (taxAmt > 0) addLink(nOp, addNode("tax", `법인세·기타\n${fmtShort(taxAmt, unit)}`, COLORS.tax), taxAmt);
+        addLink(nOp, addNode("ni", `순이익\n${fmtShort(ni, unit)}`, COLORS.ni), ni);
+      }
+      // ni >= op (비영업이익·세금환급 등)이면 영업이익을 leaf로 표시 (추가 분기 없음)
+    } else if (op != null && op < 0) {
+      addLink(nGross, addNode("opcost", `영업비용\n${fmtShort(gross, unit)}`, COLORS.opcost), gross);
     }
   } else if (op != null && op >= 0) {
     // 매출총이익 없음: 매출 → 영업비용 + 영업이익
     const opcost = rev - op;
-    if (opcost > 0) {
-      const iOpcost = addNode("opcost", `영업비용\n${fmtShort(opcost, unit)}`, COLORS.opcost);
-      addLink(iRev, iOpcost, opcost);
-    }
-    const iOp = addNode("op", `영업이익\n${fmtShort(op, unit)}`, COLORS.op);
-    addLink(iRev, iOp, op);
+    if (opcost > 0) addLink(nRev, addNode("opcost", `영업비용\n${fmtShort(opcost, unit)}`, COLORS.opcost), opcost);
+    const nOp = addNode("op", `영업이익\n${fmtShort(op, unit)}`, COLORS.op);
+    addLink(nRev, nOp, op);
 
-    if (ni != null && ni > 0 && ni <= op) {
+    if (ni != null && ni > 0 && ni < op) {
       const taxAmt = op - ni;
-      const iNi = addNode("ni", `당기순이익\n${fmtShort(ni, unit)}`, COLORS.ni);
-      if (taxAmt > 0) {
-        const iTax = addNode("tax", `법인세·기타\n${fmtShort(taxAmt, unit)}`, COLORS.tax);
-        addLink(iOp, iTax, taxAmt);
-      }
-      addLink(iOp, iNi, ni);
+      if (taxAmt > 0) addLink(nOp, addNode("tax", `법인세·기타\n${fmtShort(taxAmt, unit)}`, COLORS.tax), taxAmt);
+      addLink(nOp, addNode("ni", `순이익\n${fmtShort(ni, unit)}`, COLORS.ni), ni);
     }
   } else {
-    // 매출총이익도 없고 영업이익도 없거나 음수 → 최소 표시
     return null;
   }
 
@@ -184,16 +161,26 @@ function SankeyDiagram({ data }: { data: FinancialChartData }) {
 
   const { nodes: rawNodes, links: rawLinks, unit } = graph;
 
-  const layout = createSankey<RawNode, RawLink>()
-    .nodeId((d) => (d as RawNode).nodeId)
-    .nodeWidth(NODE_WIDTH)
-    .nodePadding(NODE_PAD)
-    .extent([[6, 10], [SVG_W - 6, SVG_H - 10]]);
-
-  const { nodes, links } = layout({
-    nodes: rawNodes.map((d) => ({ ...d })),
-    links: rawLinks.map((d) => ({ ...d })),
-  });
+  let nodes: LNode[], links: LLink[];
+  try {
+    const layout = createSankey<RawNode, RawLink>()
+      .nodeId((d) => (d as RawNode).nodeId)
+      .nodeWidth(NODE_WIDTH)
+      .nodePadding(NODE_PAD)
+      .extent([[6, 10], [SVG_W - 6, SVG_H - 10]]);
+    const result = layout({
+      nodes: rawNodes.map((d) => ({ ...d })),
+      links: rawLinks.map((d) => ({ ...d })),
+    });
+    nodes = result.nodes as LNode[];
+    links = result.links as LLink[];
+  } catch {
+    return (
+      <div className="flex items-center justify-center py-10 text-sm text-slate-400">
+        Sankey 레이아웃 계산 중 오류가 발생했습니다.
+      </div>
+    );
+  }
 
   const linkPath = sankeyLinkHorizontal<RawNode, RawLink>();
 
