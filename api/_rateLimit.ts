@@ -7,7 +7,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
  */
 
 const WINDOW_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_LIMIT = 10;
+const DEFAULT_LIMIT = parseInt(process.env.DAILY_ANALYSIS_LIMIT ?? "50", 10) || 50;
 
 type Bucket = { count: number; resetAt: number };
 const buckets = new Map<string, Bucket>();
