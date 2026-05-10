@@ -4,7 +4,7 @@ import { demoAnalyzeResponse } from "./demoData";
 export async function requestAnalyze(
   source: DisclosureSource,
   query: string,
-  opts?: { demo?: boolean },
+  opts?: { demo?: boolean; compareWith?: string },
 ): Promise<AnalyzeResponse> {
   const useDemo =
     opts?.demo === true || import.meta.env.VITE_USE_DEMO === "1";
@@ -16,7 +16,7 @@ export async function requestAnalyze(
   const res = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ source, query }),
+    body: JSON.stringify({ source, query, ...(opts?.compareWith ? { compareWith: opts.compareWith } : {}) }),
   });
 
   const raw = await res.text();

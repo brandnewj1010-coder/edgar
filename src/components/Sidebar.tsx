@@ -8,6 +8,8 @@ export function Sidebar({
   onSource,
   query,
   onQuery,
+  compareWith,
+  onCompareWith,
   onSubmit,
   loading,
   recent,
@@ -20,6 +22,8 @@ export function Sidebar({
   onSource: (s: DisclosureSource) => void;
   query: string;
   onQuery: (q: string) => void;
+  compareWith: string;
+  onCompareWith: (v: string) => void;
   onSubmit: () => void;
   loading: boolean;
   recent: RecentItem[];
@@ -120,6 +124,21 @@ export function Sidebar({
               )}
             </button>
           </div>
+        </div>
+
+        {/* 비교 기업 */}
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-slate-600">
+            비교 기업 <span className="text-slate-400">(선택)</span>
+          </label>
+          <input
+            value={compareWith}
+            onChange={(e) => onCompareWith(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onSubmit()}
+            placeholder={source === "dart" ? "예: SK하이닉스, 000660" : "예: AMD"}
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-sm outline-none transition focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-500/15 placeholder:text-slate-400"
+          />
+          <p className="mt-1 text-[10px] text-slate-400">입력하면 두 기업 비교 차트가 표시됩니다</p>
         </div>
 
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
