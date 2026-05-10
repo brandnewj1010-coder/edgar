@@ -67,7 +67,7 @@ function extractTag(block: string, tag: string): string {
   return m ? m[1].trim() : "";
 }
 
-const CORP_FETCH_MS = 45_000;
+const CORP_FETCH_MS = 20_000;
 
 /**
  * 자주 쓰는 종목 고유번호 고정 테이블 — XML 다운로드 없이 즉시 반환.
@@ -77,7 +77,7 @@ const DART_CORP_BY_STOCK: Record<string, DartCorp> = {
   "005930": { corp_code: "00126380", corp_name: "삼성전자",       stock_code: "005930" },
   "000660": { corp_code: "00164779", corp_name: "SK하이닉스",     stock_code: "000660" },
   "035720": { corp_code: "00104856", corp_name: "카카오",          stock_code: "035720" },
-  "035420": { corp_code: "00104204", corp_name: "NAVER",           stock_code: "035420" },
+  "035420": { corp_code: "00293886", corp_name: "NAVER",           stock_code: "035420" },
   "000270": { corp_code: "00164742", corp_name: "기아",            stock_code: "000270" },
   "005380": { corp_code: "00105008", corp_name: "현대자동차",      stock_code: "005380" },
   "051910": { corp_code: "00548395", corp_name: "LG화학",          stock_code: "051910" },
@@ -188,16 +188,19 @@ export async function resolveDartCorp(
   // 1. 숫자 → 종목코드 직접 조회
   if (/^\d{1,6}$/.test(q)) {
     const code = q.padStart(6, "0");
+    const direct = DART_CORP_BY_STOCK[code];
+    if (direct) return direct;
     const xml = await loadCorpXml(crtfc_key);
-    return findCorpInXml(code, xml) ?? DART_CORP_BY_STOCK[code] ?? null;
+    return findCorpInXml(code, xml);
   }
 
-  // 2. alias 테이블 (대소문자·공백 무관)
-  // XML이 corp_code의 정본 — 하드코딩 테이블은 corp_code가 틀릴 수 있어 XML 우선
+  // 2. alias 테이블 (대소문자·공백 무관) — 하드코딩 테이블로 즉시 반환 (XML 생략)
   const stockCode = lookupAlias(q);
   if (stockCode) {
+    const direct = DART_CORP_BY_STOCK[stockCode];
+    if (direct) return direct;
     const xml = await loadCorpXml(crtfc_key);
-    return findCorpInXml(stockCode, xml) ?? DART_CORP_BY_STOCK[stockCode] ?? null;
+    return findCorpInXml(stockCode, xml);
   }
 
   // 3. XML 전체 검색 (한글 회사명 직접 타이핑)
@@ -216,7 +219,7 @@ export async function loadCorpXml(crtfc_key: string): Promise<string> {
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") {
       throw new Error(
-        `고유번호 목록 다운로드 시간 초과(${CORP_FETCH_MS / 1000}s). 네트워크·Vercel 함수 한도를 확인하세요.`,
+        `DART 기업 목록을 ${CORP_FETCH_MS / 1000}초 내에 가져오지 못했습니다. 자주 검색하는 기업은 사이드바 퀵픽을 이용하거나, 6자리 종목코드(예: 005930)로 검색해 보세요.`,
       );
     }
     throw e;
