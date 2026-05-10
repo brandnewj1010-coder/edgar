@@ -61,6 +61,29 @@ function setCachedBundle(key: string, data: DartBundle): void {
 let corpXmlCache: string | null = null;
 let corpXmlCacheKey = "";
 
+/** ── corp-map.json 캐시 (빌드타임 생성 → CDN 서빙) ── */
+type CorpMapEntry = { corp_code: string; corp_name: string };
+type CorpMap = { byStock: Record<string, CorpMapEntry>; byName: Record<string, string> };
+let corpMapCache: CorpMap | null = null;
+let corpMapLoaded = false;
+
+async function loadCorpMap(): Promise<CorpMap | null> {
+  if (corpMapLoaded) return corpMapCache;
+  corpMapLoaded = true;
+  const base = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/corp-map.json`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) return null;
+    corpMapCache = (await res.json()) as CorpMap;
+    return corpMapCache;
+  } catch {
+    return null;
+  }
+}
+
 function extractTag(block: string, tag: string): string {
   const re = new RegExp(`<${tag}>([^<]*)</${tag}>`, "i");
   const m = block.match(re);
@@ -191,22 +214,47 @@ export async function resolveDartCorp(
   const q = query.trim();
   if (!q) return null;
 
-  // 1. 숫자 → 종목코드로 하드코딩 테이블 우선, 없으면 XML
+  // corp-map.json (빌드타임 생성, CDN 서빙) 우선 — 모든 상장사 커버
+  const corpMap = await loadCorpMap();
+
   if (/^\d{1,6}$/.test(q)) {
     const code = q.padStart(6, "0");
-    const hardcoded = DART_CORP_BY_STOCK[code];
-    if (hardcoded) return hardcoded;
+    // 1a. 하드코딩 테이블 (즉시)
+    if (DART_CORP_BY_STOCK[code]) return DART_CORP_BY_STOCK[code];
+    // 1b. corp-map.json
+    if (corpMap?.byStock[code]) {
+      const e = corpMap.byStock[code];
+      return { corp_code: e.corp_code, corp_name: e.corp_name, stock_code: code };
+    }
+    // 1c. DART XML (느림, 폴백)
     const xml = await loadCorpXml(crtfc_key);
     return findCorpInXml(code, xml);
   }
 
-  // 2. alias 테이블 → 하드코딩 테이블로 즉시 반환 (XML 다운로드 불필요)
-  const stockCode = lookupAlias(q);
-  if (stockCode) {
-    return DART_CORP_BY_STOCK[stockCode] ?? null;
+  // 2. 회사명 검색
+  // 2a. alias 테이블 → 하드코딩 테이블 (즉시)
+  const aliasCode = lookupAlias(q);
+  if (aliasCode && DART_CORP_BY_STOCK[aliasCode]) return DART_CORP_BY_STOCK[aliasCode];
+
+  // 2b. corp-map.json 이름 역인덱스 (정확 일치)
+  if (corpMap) {
+    const key = q.replace(/\s+/g, "").toLowerCase();
+    const keyOrig = q.replace(/\s+/g, "");
+    const sc = corpMap.byName[key] ?? corpMap.byName[keyOrig];
+    if (sc && corpMap.byStock[sc]) {
+      const e = corpMap.byStock[sc];
+      return { corp_code: e.corp_code, corp_name: e.corp_name, stock_code: sc };
+    }
+    // 2c. corp-map.json 부분 일치 (포함 검색)
+    for (const [nameKey, stockCode] of Object.entries(corpMap.byName)) {
+      if (nameKey.includes(key) || key.includes(nameKey)) {
+        const e = corpMap.byStock[stockCode];
+        if (e) return { corp_code: e.corp_code, corp_name: e.corp_name, stock_code: stockCode };
+      }
+    }
   }
 
-  // 3. XML 전체 검색 (한글 회사명 직접 타이핑)
+  // 2d. DART XML 전체 검색 (느림, 폴백)
   const xml = await loadCorpXml(crtfc_key);
   return findCorpInXml(q, xml);
 }
