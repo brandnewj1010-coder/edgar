@@ -15,7 +15,7 @@ import {
   fetchRecentFilings,
   resolveEdgarCik,
 } from "./edgar.js";
-import type { QuizItem, ReflectionItem, FinancialChartData } from "../src/types.js";
+import type { QuizItem, ReflectionItem, FinancialChartData, InsightCards } from "../src/types.js";
 
 export const config = { maxDuration: 60 };
 
@@ -241,6 +241,40 @@ ${snippet}
 - correctIndex는 0~3 정수`;
 }
 
+function buildInsightCardsPrompt(reportMarkdown: string, company: string): string {
+  const snippet = reportMarkdown.slice(0, 3000);
+  return `다음 재무 공시 해설을 바탕으로 HR 실무자를 위한 **구조화된 인사이트 카드**를 JSON으로 생성하세요.
+
+리포트 (일부):
+---
+${snippet}
+---
+
+출력 형식: JSON 코드 블록만. 다른 텍스트 없이.
+\`\`\`json
+{
+  "watchOuts": [
+    {"title": "주목할 점 제목", "detail": "2~3문장 설명", "severity": "high"}
+  ],
+  "anomalies": [
+    {"metric": "지표명 (예: 영업이익률)", "note": "이상치 설명 1문장", "direction": "down"}
+  ],
+  "scenarios": [
+    {"if": "가정 조건 (예: 원/달러 환율 10% 상승 시)", "then": "예상 결과 1~2문장"}
+  ],
+  "strengths": ["강점 한 줄", "강점 한 줄"]
+}
+\`\`\`
+
+조건:
+- 기업: ${company}
+- watchOuts 2~3개, severity는 high/mid/low 중 하나
+- anomalies 1~2개, direction은 up/down/flat 중 하나
+- scenarios 1~2개 (HR·비용 관련 시나리오 우선)
+- strengths 2~3개 (공시에서 확인되는 객관적 강점)
+- 모든 항목은 공시 수치 기반, 추측 금지`;
+}
+
 function buildReflectionPrompt(reportMarkdown: string, company: string): string {
   const snippet = reportMarkdown.slice(0, 2000);
   return `다음 재무 공시 해설을 읽고 HR 실무자를 위한 **서술형 성찰 질문 3개**를 만드세요.
@@ -262,6 +296,20 @@ ${snippet}
 - 정답 없는 열린 질문 (토론·사고 유도)
 - HR 실무자 관점 (인건비·조직구조·보상·채용 등)
 - 3개 질문은 서로 다른 관점에서`;
+}
+
+function parseInsightCards(text: string): InsightCards | null {
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/);
+  if (!jsonMatch) return null;
+  try {
+    const p = JSON.parse(jsonMatch[1]);
+    return {
+      watchOuts: Array.isArray(p.watchOuts) ? p.watchOuts : [],
+      anomalies: Array.isArray(p.anomalies) ? p.anomalies : [],
+      scenarios: Array.isArray(p.scenarios) ? p.scenarios : [],
+      strengths: Array.isArray(p.strengths) ? p.strengths : [],
+    };
+  } catch { return null; }
 }
 
 function sleep(ms: number) {
@@ -486,10 +534,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         reportMarkdown = `${dartTablesMarkdown}\n\n---\n\n## AI 해설 노트\n\n${reportMarkdown}`;
       }
 
-      // ── 퀴즈 + 성찰 질문 병렬 생성 ───────────────────────────────────────
+      // ── 퀴즈 + 성찰 + 인사이트 카드 병렬 생성 ───────────────────────────
       let quiz: QuizItem[] = [];
       let reflectionPrompts: ReflectionItem[] = [];
-      const [quizResult, reflectionResult] = await Promise.allSettled([
+      let insightCards: InsightCards | null = null;
+      const [quizResult, reflectionResult, insightResult] = await Promise.allSettled([
         chatWithRetry(client, {
           model,
           messages: [{ role: "user", content: buildQuizPrompt(reportMarkdown, query) }],
@@ -499,6 +548,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           model,
           messages: [{ role: "user", content: buildReflectionPrompt(reportMarkdown, query) }],
           max_tokens: 600,
+        }),
+        chatWithRetry(client, {
+          model,
+          messages: [{ role: "user", content: buildInsightCardsPrompt(reportMarkdown, query) }],
+          max_tokens: 800,
         }),
       ]);
       if (quizResult.status === "fulfilled") {
@@ -511,6 +565,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } else {
         console.warn("[analyze reflection gen]", reflectionResult.reason);
       }
+      if (insightResult.status === "fulfilled") {
+        insightCards = parseInsightCards(extractMessageText(insightResult.value));
+      } else {
+        console.warn("[analyze insight cards]", insightResult.reason);
+      }
 
       const finalModel = usedFallback ? `${model} (fallback)` : model;
       void setCached(source, query, { reportMarkdown, headline, quiz, reflectionPrompts, sources, model: finalModel, chartData });
@@ -520,6 +579,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         headline,
         quiz,
         reflectionPrompts,
+        insightCards,
         sankey: null,
         chartData,
         compareChartData: compareChartData ?? null,
