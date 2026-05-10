@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import OpenAI from "openai";
 import { applyRateLimitHeaders, checkRateLimit, getClientIp } from "./_rateLimit.js";
+import { getCached, setCached } from "./_cache.js";
 import {
   bundleToChartData,
   bundleToMarkdown,
@@ -337,6 +338,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    // ── 캐시 확인 ────────────────────────────────────────────────────────────
+    const cached = await getCached(source, query);
+    if (cached) {
+      res.status(200).json({ ...cached, sankey: null, groundingQueries: [], source, query });
+      return;
+    }
+
     // ── 데이터 수집 ─────────────────────────────────────────────────────────
     let dartTablesMarkdown = "";
     let dartPromptSnippet: string | null = null;
@@ -478,6 +486,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.warn("[analyze reflection gen]", reflectionResult.reason);
       }
 
+      const finalModel = usedFallback ? `${model} (fallback)` : model;
+      void setCached(source, query, { reportMarkdown, headline, quiz, reflectionPrompts, sources, model: finalModel, chartData });
+
       res.status(200).json({
         reportMarkdown,
         headline,
@@ -487,7 +498,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         chartData,
         groundingQueries: [],
         sources,
-        model: usedFallback ? `${model} (fallback)` : model,
+        model: finalModel,
         source,
         query,
       });
