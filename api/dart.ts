@@ -23,6 +23,7 @@ type DartApiEnvelope = {
 export type FnlttRow = {
   sj_div?: string;
   sj_nm?: string;
+  account_id?: string;   // IFRS 표준 코드 (ifrs-full_Revenue 등)
   account_nm?: string;
   thstrm_amount?: string;
   frmtrm_amount?: string;
@@ -67,21 +68,56 @@ type CorpMap = { byStock: Record<string, CorpMapEntry>; byName: Record<string, s
 let corpMapCache: CorpMap | null = null;
 let corpMapLoaded = false;
 
+function buildCorpMapFromXml(xml: string): CorpMap {
+  const byStock: Record<string, CorpMapEntry> = {};
+  const byName: Record<string, string> = {};
+  const listRe = /<list[^>]*>([\s\S]*?)<\/list>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = listRe.exec(xml)) !== null) {
+    const block = m[1];
+    const corp_code = extractTag(block, "corp_code");
+    const corp_name = extractTag(block, "corp_name");
+    const stock_code = extractTag(block, "stock_code").trim();
+    if (!corp_code || !corp_name || !/^\d{6}$/.test(stock_code)) continue;
+    byStock[stock_code] = { corp_code, corp_name };
+    const key = corp_name.replace(/\s+/g, "").toLowerCase();
+    byName[key] = stock_code;
+    const keyOrig = corp_name.replace(/\s+/g, "");
+    if (keyOrig !== key) byName[keyOrig] = stock_code;
+  }
+  return { byStock, byName };
+}
+
 async function loadCorpMap(): Promise<CorpMap | null> {
   if (corpMapLoaded) return corpMapCache;
   corpMapLoaded = true;
-  const base = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
-  if (!base) return null;
-  try {
-    const res = await fetch(`${base}/corp-map.json`, {
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!res.ok) return null;
-    corpMapCache = (await res.json()) as CorpMap;
-    return corpMapCache;
-  } catch {
-    return null;
+
+  // 1) 빌드타임 생성된 정적 파일 시도 (production URL 우선)
+  const prodUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : null;
+
+  if (prodUrl) {
+    try {
+      const res = await fetch(`${prodUrl}/corp-map.json`, {
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (res.ok) {
+        corpMapCache = (await res.json()) as CorpMap;
+        return corpMapCache;
+      }
+    } catch { /* fall through */ }
   }
+
+  // 2) XML이 이미 캐시돼 있으면 메모리에서 map 빌드 (재다운로드 없음)
+  if (corpXmlCache) {
+    corpMapCache = buildCorpMapFromXml(corpXmlCache);
+    return corpMapCache;
+  }
+
+  return null;
 }
 
 function extractTag(block: string, tag: string): string {
@@ -97,43 +133,68 @@ const CORP_FETCH_MS = 20_000;
  * corp_code: DART 고유번호(8자리), stock_code: KRX 종목코드(6자리).
  */
 const DART_CORP_BY_STOCK: Record<string, DartCorp> = {
-  "005930": { corp_code: "00126380", corp_name: "삼성전자",       stock_code: "005930" },
-  "000660": { corp_code: "00164779", corp_name: "SK하이닉스",     stock_code: "000660" },
-  "035720": { corp_code: "00104856", corp_name: "카카오",          stock_code: "035720" },
-  "035420": { corp_code: "00293886", corp_name: "NAVER",           stock_code: "035420" },
-  "000270": { corp_code: "00164742", corp_name: "기아",            stock_code: "000270" },
-  "005380": { corp_code: "00105008", corp_name: "현대자동차",      stock_code: "005380" },
-  "051910": { corp_code: "00548395", corp_name: "LG화학",          stock_code: "051910" },
-  "006400": { corp_code: "00126261", corp_name: "삼성SDI",         stock_code: "006400" },
-  "207940": { corp_code: "01166928", corp_name: "삼성바이오로직스", stock_code: "207940" },
-  "373220": { corp_code: "01890562", corp_name: "LG에너지솔루션",  stock_code: "373220" },
-  "066570": { corp_code: "00401731", corp_name: "LG전자",          stock_code: "066570" },
-  "017670": { corp_code: "00146029", corp_name: "SK텔레콤",        stock_code: "017670" },
-  "005490": { corp_code: "00431263", corp_name: "POSCO홀딩스",     stock_code: "005490" },
-  "068270": { corp_code: "00553234", corp_name: "셀트리온",         stock_code: "068270" },
-  "015760": { corp_code: "00159643", corp_name: "한국전력",         stock_code: "015760" },
-  "030200": { corp_code: "00156360", corp_name: "KT",              stock_code: "030200" },
-  "028260": { corp_code: "00102349", corp_name: "삼성물산",         stock_code: "028260" },
-  "000810": { corp_code: "00126259", corp_name: "삼성화재",         stock_code: "000810" },
-  "090430": { corp_code: "00642807", corp_name: "아모레퍼시픽",    stock_code: "090430" },
-  "352820": { corp_code: "01450869", corp_name: "하이브",           stock_code: "352820" },
-  "259960": { corp_code: "01257973", corp_name: "크래프톤",         stock_code: "259960" },
-  "323410": { corp_code: "01427728", corp_name: "카카오뱅크",       stock_code: "323410" },
-  "003550": { corp_code: "00107897", corp_name: "LG",              stock_code: "003550" },
-  "034730": { corp_code: "00603009", corp_name: "SK",              stock_code: "034730" },
-  "012330": { corp_code: "00164788", corp_name: "현대모비스",       stock_code: "012330" },
-  "032830": { corp_code: "00118228", corp_name: "삼성생명",         stock_code: "032830" },
-  "105560": { corp_code: "00704008", corp_name: "KB금융",           stock_code: "105560" },
-  "086790": { corp_code: "00680937", corp_name: "하나금융지주",     stock_code: "086790" },
-  "055550": { corp_code: "00416950", corp_name: "신한지주",         stock_code: "055550" },
-  "316140": { corp_code: "01388796", corp_name: "우리금융지주",     stock_code: "316140" },
-  "010950": { corp_code: "00164452", corp_name: "S-Oil",           stock_code: "010950" },
-  "096770": { corp_code: "00688996", corp_name: "SK이노베이션",     stock_code: "096770" },
-  "011200": { corp_code: "00164770", corp_name: "HMM",             stock_code: "011200" },
-  "000100": { corp_code: "00106641", corp_name: "유한양행",         stock_code: "000100" },
-  "247540": { corp_code: "01144636", corp_name: "에코프로비엠",     stock_code: "247540" },
-  "086520": { corp_code: "00866545", corp_name: "에코프로",         stock_code: "086520" },
-  "003670": { corp_code: "00108726", corp_name: "포스코퓨처엠",    stock_code: "003670" },
+  // ── 대형주 (DART naviCrpCik 검증 완료) ─────────────────────────────────────
+  "005930": { corp_code: "00126380", corp_name: "삼성전자",         stock_code: "005930" },
+  "000660": { corp_code: "00164779", corp_name: "SK하이닉스",       stock_code: "000660" },
+  "035420": { corp_code: "00266961", corp_name: "NAVER",             stock_code: "035420" },
+  "035720": { corp_code: "00258801", corp_name: "카카오",            stock_code: "035720" },
+  "000270": { corp_code: "00106641", corp_name: "기아",              stock_code: "000270" },
+  "005380": { corp_code: "00164742", corp_name: "현대자동차",        stock_code: "005380" },
+  "051910": { corp_code: "00356361", corp_name: "LG화학",            stock_code: "051910" },
+  "006400": { corp_code: "00126362", corp_name: "삼성SDI",           stock_code: "006400" },
+  "207940": { corp_code: "00877059", corp_name: "삼성바이오로직스",  stock_code: "207940" },
+  "373220": { corp_code: "01515323", corp_name: "LG에너지솔루션",   stock_code: "373220" },
+  "066570": { corp_code: "00401731", corp_name: "LG전자",            stock_code: "066570" },
+  "017670": { corp_code: "00159023", corp_name: "SK텔레콤",          stock_code: "017670" },
+  "005490": { corp_code: "00155319", corp_name: "POSCO홀딩스",       stock_code: "005490" },
+  "068270": { corp_code: "00413046", corp_name: "셀트리온",           stock_code: "068270" },
+  "015760": { corp_code: "00159643", corp_name: "한국전력",           stock_code: "015760" },
+  "030200": { corp_code: "00190321", corp_name: "KT",                stock_code: "030200" },
+  "028260": { corp_code: "00149655", corp_name: "삼성물산",           stock_code: "028260" },
+  "000810": { corp_code: "00139214", corp_name: "삼성화재",           stock_code: "000810" },
+  "090430": { corp_code: "00642807", corp_name: "아모레퍼시픽",      stock_code: "090430" },
+  "352820": { corp_code: "01450869", corp_name: "하이브",             stock_code: "352820" },
+  "259960": { corp_code: "00760971", corp_name: "크래프톤",           stock_code: "259960" },
+  "323410": { corp_code: "01427728", corp_name: "카카오뱅크",         stock_code: "323410" },
+  "003550": { corp_code: "00107897", corp_name: "LG",                stock_code: "003550" },
+  "034730": { corp_code: "00181712", corp_name: "SK",                stock_code: "034730" },
+  "012330": { corp_code: "00164788", corp_name: "현대모비스",         stock_code: "012330" },
+  "032830": { corp_code: "00118228", corp_name: "삼성생명",           stock_code: "032830" },
+  "105560": { corp_code: "00688996", corp_name: "KB금융",             stock_code: "105560" },
+  "086790": { corp_code: "00547583", corp_name: "하나금융지주",       stock_code: "086790" },
+  "055550": { corp_code: "00416950", corp_name: "신한지주",           stock_code: "055550" },
+  "316140": { corp_code: "01388796", corp_name: "우리금융지주",       stock_code: "316140" },
+  "010950": { corp_code: "00164452", corp_name: "S-Oil",             stock_code: "010950" },
+  "096770": { corp_code: "00631518", corp_name: "SK이노베이션",       stock_code: "096770" },
+  "011200": { corp_code: "00164645", corp_name: "HMM",               stock_code: "011200" },
+  "000100": { corp_code: "00145109", corp_name: "유한양행",           stock_code: "000100" },
+  "247540": { corp_code: "01144636", corp_name: "에코프로비엠",       stock_code: "247540" },
+  "086520": { corp_code: "00866545", corp_name: "에코프로",           stock_code: "086520" },
+  "003670": { corp_code: "00108726", corp_name: "포스코퓨처엠",      stock_code: "003670" },
+  // 게임
+  "036570": { corp_code: "00211079", corp_name: "엔씨소프트",        stock_code: "036570" },
+  "251270": { corp_code: "01228485", corp_name: "넷마블",             stock_code: "251270" },
+  "263750": { corp_code: "01451948", corp_name: "펄어비스",           stock_code: "263750" },
+  "112040": { corp_code: "00375525", corp_name: "위메이드",           stock_code: "112040" },
+  "078340": { corp_code: "00476498", corp_name: "컴투스",             stock_code: "078340" },
+  "293490": { corp_code: "01137383", corp_name: "카카오게임즈",      stock_code: "293490" },
+  // 엔터·미디어
+  "041510": { corp_code: "00194329", corp_name: "에스엠",             stock_code: "041510" },
+  "035900": { corp_code: "00117473", corp_name: "JYP Ent.",           stock_code: "035900" },
+  "122870": { corp_code: "00779857", corp_name: "와이지엔터테인먼트", stock_code: "122870" },
+  // 반도체·IT
+  "000990": { corp_code: "00121596", corp_name: "DB하이텍",           stock_code: "000990" },
+  "042700": { corp_code: "00156028", corp_name: "한미반도체",         stock_code: "042700" },
+  // 헬스케어
+  "326030": { corp_code: "01462189", corp_name: "SK바이오팜",         stock_code: "326030" },
+  "196170": { corp_code: "01117264", corp_name: "알테오젠",           stock_code: "196170" },
+  // 기타
+  "071050": { corp_code: "00587523", corp_name: "한국금융지주",       stock_code: "071050" },
+  "180640": { corp_code: "01139218", corp_name: "한진칼",             stock_code: "180640" },
+  "003490": { corp_code: "00107638", corp_name: "대한항공",           stock_code: "003490" },
+  "020560": { corp_code: "00126720", corp_name: "아시아나항공",       stock_code: "020560" },
+  "000720": { corp_code: "00105319", corp_name: "현대건설",           stock_code: "000720" },
+  "028050": { corp_code: "00122472", corp_name: "삼성엔지니어링",     stock_code: "028050" },
 };
 
 /**
@@ -190,6 +251,22 @@ const DART_CORP_NAME_ALIAS: Record<string, string> = {
   // 엔터·게임
   "하이브": "352820", "hybe": "352820", "빅히트": "352820",
   "크래프톤": "259960", "krafton": "259960",
+  "엔씨소프트": "036570", "엔씨": "036570", "ncsoft": "036570", "nc소프트": "036570",
+  "넷마블": "251270", "netmarble": "251270",
+  "펄어비스": "263750", "pearl abyss": "263750",
+  "위메이드": "112040", "wemade": "112040",
+  "컴투스": "078340", "com2us": "078340",
+  "카카오게임즈": "293490", "kakao games": "293490",
+  // 엔터·미디어
+  "에스엠": "041510", "sm엔터": "041510", "sm": "041510",
+  "jyp": "035900", "jyp엔터": "035900",
+  "와이지": "122870", "yjp": "122870", "yg엔터": "122870",
+  // 항공
+  "대한항공": "003490", "koreanair": "003490",
+  "아시아나": "020560", "아시아나항공": "020560", "asiana": "020560",
+  // 건설
+  "현대건설": "000720",
+  "삼성엔지니어링": "028050",
 };
 
 /** 쿼리를 정규화해 alias 테이블을 검색 */
@@ -373,10 +450,14 @@ const RE_CORE_ACCOUNT =
 const RE_LABOR_ACCOUNT =
   /급여|퇴직|임원|보수|복리후생|사외이사|스톡|주식보상|상여|퇴직급여|연금|인건비|판매비와관리비|경상연구개발|판매비|관리비/;
 
+const RE_CORE_IDS =
+  /revenue|profit|equity|assets|liabilities|cashflow|financing|investing|operating|interest/i;
+
 function accountStudyScore(r: FnlttRow): number {
   const nm = (r.account_nm || "").replace(/\s/g, "");
+  const id = r.account_id || "";
   let s = 0;
-  if (RE_CORE_ACCOUNT.test(nm)) s += 4;
+  if (RE_CORE_ACCOUNT.test(nm) || RE_CORE_IDS.test(id)) s += 4;
   if (RE_LABOR_ACCOUNT.test(nm)) s += 3;
   return s;
 }
@@ -636,9 +717,22 @@ function findAmount(rows: FnlttRow[], patterns: RegExp[]): number | null {
 
 function findAmountTriple(
   rows: FnlttRow[],
-  patterns: RegExp[],
+  accountIds: string[],
+  namePatterns: RegExp[],
 ): [number | null, number | null, number | null] {
-  for (const pat of patterns) {
+  // 1차: IFRS 표준 account_id로 정확 매칭 (회사·계정명 무관)
+  for (const id of accountIds) {
+    for (const r of rows) {
+      if ((r.account_id || "").trim() === id) {
+        const v = parseAmount(r.thstrm_amount);
+        if (v !== null) {
+          return [v, parseAmount(r.frmtrm_amount), parseAmount(r.bfefrmtrm_amount)];
+        }
+      }
+    }
+  }
+  // 2차: account_id 없거나 불일치 시 계정명 패턴으로 폴백
+  for (const pat of namePatterns) {
     for (const r of rows) {
       const nm = (r.account_nm || "").replace(/\s/g, "");
       if (pat.test(nm)) {
@@ -664,94 +758,143 @@ export function bundleToChartData(b: DartBundle): FinancialChartData {
   const priorPriorYear = String(parseInt(year) - 2);
 
   // --- 주요 손익 ---
+  // accountIds: IFRS 표준 코드 (1차), namePatterns: 계정명 폴백 (2차)
   const KEY_METRICS: Array<{
     label: string;
-    patterns: RegExp[];
+    accountIds: string[];
+    namePatterns: RegExp[];
     category: FinancialMetric["category"];
     unit: string;
   }> = [
     {
       label: "매출액",
-      patterns: [/^매출액$/, /^수익\(매출액\)$/, /^영업수익$/, /매출액/],
+      accountIds: [
+        "ifrs-full_Revenue",
+        "ifrs-full_RevenueFromContractsWithCustomers",
+        "dart_Revenue",
+        "ifrs-full_OperatingRevenue",
+      ],
+      namePatterns: [/^매출액$/, /^수익\(매출액\)$/, /^영업수익$/, /매출액/],
       category: "income",
       unit: "백만원",
     },
     {
       label: "매출총이익",
-      patterns: [/^매출총이익$/, /매출총이익/],
+      accountIds: ["ifrs-full_GrossProfit"],
+      namePatterns: [/^매출총이익$/],
       category: "income",
       unit: "백만원",
     },
     {
       label: "영업이익",
-      patterns: [/^영업이익$/, /^영업이익\(손실\)$/, /^영업손익$/],
+      accountIds: [
+        "ifrs-full_ProfitLossFromOperatingActivities",
+        "dart_OperatingIncomeLoss",
+        "ifrs-full_OperatingProfit",
+      ],
+      namePatterns: [/^영업이익$/, /^영업이익\(손실\)$/, /^영업손익$/],
       category: "income",
       unit: "백만원",
     },
     {
       label: "당기순이익",
-      patterns: [/^당기순이익$/, /^당기순이익\(손실\)$/, /^분기순이익$/],
+      accountIds: [
+        "ifrs-full_ProfitLoss",
+        "ifrs-full_ProfitLossAttributableToOwnersOfParent",
+      ],
+      namePatterns: [/^당기순이익$/, /^당기순이익\(손실\)$/, /^분기순이익$/],
       category: "income",
       unit: "백만원",
     },
     {
       label: "이자비용",
-      patterns: [/^이자비용$/, /^금융비용$/, /이자비용/],
+      accountIds: [
+        "ifrs-full_FinanceCosts",
+        "ifrs-full_InterestExpense",
+        "dart_InterestExpense",
+      ],
+      namePatterns: [/^이자비용$/, /^금융비용$/, /이자비용/],
       category: "income",
       unit: "백만원",
     },
     {
       label: "영업활동현금흐름",
-      patterns: [/^영업활동.*현금흐름$/, /영업활동으로인한현금흐름/],
+      accountIds: [
+        "ifrs-full_CashFlowsFromUsedInOperatingActivities",
+        "ifrs-full_CashFlowsFromOperatingActivities",
+      ],
+      namePatterns: [/^영업활동.*현금흐름$/, /영업활동으로인한현금흐름/],
       category: "cashflow",
       unit: "백만원",
     },
     {
       label: "투자활동현금흐름",
-      patterns: [/^투자활동.*현금흐름$/, /투자활동으로인한현금흐름/],
+      accountIds: [
+        "ifrs-full_CashFlowsFromUsedInInvestingActivities",
+        "ifrs-full_CashFlowsFromInvestingActivities",
+      ],
+      namePatterns: [/^투자활동.*현금흐름$/, /투자활동으로인한현금흐름/],
       category: "cashflow",
       unit: "백만원",
     },
     {
       label: "재무활동현금흐름",
-      patterns: [/^재무활동.*현금흐름$/, /재무활동으로인한현금흐름/],
+      accountIds: [
+        "ifrs-full_CashFlowsFromUsedInFinancingActivities",
+        "ifrs-full_CashFlowsFromFinancingActivities",
+      ],
+      namePatterns: [/^재무활동.*현금흐름$/, /재무활동으로인한현금흐름/],
       category: "cashflow",
       unit: "백만원",
     },
     {
       label: "총자산",
-      patterns: [/^자산총계$/, /^총자산$/],
+      accountIds: ["ifrs-full_Assets"],
+      namePatterns: [/^자산총계$/, /^총자산$/],
       category: "balance",
       unit: "백만원",
     },
     {
       label: "총부채",
-      patterns: [/^부채총계$/, /^총부채$/],
+      accountIds: ["ifrs-full_Liabilities"],
+      namePatterns: [/^부채총계$/, /^총부채$/],
       category: "balance",
       unit: "백만원",
     },
     {
       label: "자본총계",
-      patterns: [/^자본총계$/, /^자기자본$/],
+      accountIds: [
+        "ifrs-full_Equity",
+        "ifrs-full_EquityAttributableToOwnersOfParent",
+      ],
+      namePatterns: [/^자본총계$/, /^자기자본$/],
       category: "balance",
       unit: "백만원",
     },
     {
       label: "단기차입금",
-      patterns: [/^단기차입금$/, /단기차입금/],
+      accountIds: [
+        "ifrs-full_ShorttermBorrowings",
+        "ifrs-full_CurrentBorrowings",
+      ],
+      namePatterns: [/^단기차입금$/, /단기차입금/],
       category: "balance",
       unit: "백만원",
     },
     {
       label: "장기차입금",
-      patterns: [/^장기차입금$/, /장기차입금/],
+      accountIds: [
+        "ifrs-full_NoncurrentBorrowings",
+        "ifrs-full_LongtermBorrowingsClassifiedAsNoncurrent",
+      ],
+      namePatterns: [/^장기차입금$/, /장기차입금/],
       category: "balance",
       unit: "백만원",
     },
   ];
 
   const metrics: FinancialMetric[] = KEY_METRICS.map((m) => {
-    const [c, p, pp] = findAmountTriple(rows, m.patterns);
+    const [c, p, pp] = findAmountTriple(rows, m.accountIds, m.namePatterns);
     return {
       label: m.label,
       current: c,

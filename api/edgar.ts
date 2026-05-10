@@ -124,9 +124,9 @@ export async function fetchEdgarFinancials(cik: string): Promise<FinancialChartD
     if (!concept) return [];
     const usd = concept.units?.USD;
     if (!Array.isArray(usd)) return [];
-    // 10-K 연간 보고서만, frame이 있는 것 우선, 최근 3년
+    // 10-K 연간 보고서만, 최근 3년 (frame 없는 최신 10-K도 포함)
     const annual = usd
-      .filter((u) => u.form === "10-K" && u.end && u.frame)
+      .filter((u) => u.form === "10-K" && u.end)
       .sort((a, b) => b.end.localeCompare(a.end));
 
     const seen = new Set<string>();
@@ -296,7 +296,7 @@ export async function fetchEdgarFinancials(cik: string): Promise<FinancialChartD
     priorPriorYear: priorPriorYear || String(new Date().getFullYear() - 3),
     metrics,
     hrMetrics: Object.keys(hrMetrics).length > 0 ? hrMetrics : undefined,
-    unitNote: "단위: USD (SEC EDGAR XBRL 기준)",
+    unitNote: `단위: USD (SEC EDGAR XBRL 기준 · 회계연도 기준 — ${currentYear || ""}년은 해당 기업의 FY${currentYear || ""} 마감 연도)`,
   };
 }
 

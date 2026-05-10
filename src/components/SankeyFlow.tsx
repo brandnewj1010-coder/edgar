@@ -1,8 +1,7 @@
 import { sankey as createSankey, sankeyLinkHorizontal } from "d3-sankey";
 import type { SankeyNode, SankeyLink } from "d3-sankey";
 import type { FinancialChartData } from "../types";
-import { GitMerge, PieChart as PieIcon } from "lucide-react";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { GitMerge } from "lucide-react";
 
 // ── 포맷 ────────────────────────────────────────────────────────────────────
 
@@ -13,17 +12,18 @@ function fmtShort(v: number, unit: string): string {
     if (abs >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
     return `$${v.toLocaleString()}`;
   }
-  const n = Math.abs(v) > 10_000_000_000 ? v / 1_000_000 : v;
+  const n = Math.abs(v) > 1_000_000_000 ? v / 1_000_000 : v;
   const abs = Math.abs(n);
   const sign = n < 0 ? "−" : "";
   if (abs >= 1_000_000) return `${sign}${(Math.abs(n) / 1_000_000).toFixed(1)}조`;
-  if (abs >= 10_000)    return `${sign}${Math.round(Math.abs(n) / 10_000).toLocaleString()}억`;
+  if (abs >= 100)       return `${sign}${Math.round(Math.abs(n) / 100).toLocaleString()}억`;
   return `${sign}${Math.round(Math.abs(n)).toLocaleString()}백만`;
 }
 
-function norm(v: number | null | undefined): number | null {
+function norm(v: number | null | undefined, unit = "백만원"): number | null {
   if (v == null) return null;
-  return Math.abs(v) > 10_000_000_000 ? v / 1_000_000 : v;
+  if (unit === "USD") return v;
+  return Math.abs(v) > 1_000_000_000 ? v / 1_000_000 : v;
 }
 
 // ── d3-sankey 타입 ───────────────────────────────────────────────────────────
@@ -51,10 +51,14 @@ const COLORS = {
 // ── 그래프 빌더 ──────────────────────────────────────────────────────────────
 
 function buildGraph(data: FinancialChartData) {
+  const unit = data.metrics.find((m) =>
+    ["매출액", "Revenue"].includes(m.label),
+  )?.unit ?? "백만원";
+
   const find = (labels: string[]): number | null => {
     for (const label of labels) {
       const m = data.metrics.find((x) => x.label === label);
-      if (m?.current != null) return norm(m.current);
+      if (m?.current != null) return norm(m.current, unit);
     }
     return null;
   };
@@ -66,10 +70,6 @@ function buildGraph(data: FinancialChartData) {
   const interest = find(["이자비용", "Interest Expense", "Labor & Related Expense"]);
 
   if (rev == null || rev <= 0) return null;
-
-  const unit = data.metrics.find((m) =>
-    ["매출액", "Revenue"].includes(m.label),
-  )?.unit ?? "백만원";
 
   const rawNodes: RawNode[] = [];
   const rawLinks: { source: string; target: string; value: number }[] = [];
@@ -146,8 +146,8 @@ function buildGraph(data: FinancialChartData) {
 
 // ── SVG Sankey 컴포넌트 ──────────────────────────────────────────────────────
 
-const SVG_W = 580;
-const SVG_H = 300;
+const SVG_W = 800;
+const SVG_H = 320;
 const NODE_WIDTH = 14;
 const NODE_PAD   = 16;
 
@@ -366,32 +366,25 @@ export function SankeyFlow({ data }: { data: FinancialChartData }) {
   if (!hasRev) return null;
 
   return (
-    <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
           <GitMerge className="h-4 w-4" />
         </div>
         <div>
-          <h3 className="text-base font-semibold text-slate-900">매출 → 비용 → 이익 흐름</h3>
+          <h3 className="text-base font-semibold text-slate-900">자금 흐름 Sankey</h3>
           <p className="text-xs text-slate-400">
             {data.corp} · {data.currentYear}년 · 노드 두께 = 금액 비례
           </p>
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div>
-          <h4 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-            <GitMerge className="h-4 w-4 text-indigo-400" />
-            자금 흐름 Sankey
-          </h4>
-          <SankeyDiagram data={data} />
-        </div>
-        <CategoryPie data={data} />
-      </div>
+      <SankeyDiagram data={data} />
 
       <p className="text-[10px] text-slate-400">
-        * 교육용 시각화. 매출원가·판관비·세금은 매출·영업이익·순이익으로부터 역산한 추정치입니다.
+        {data.metrics.some((m) => m.unit === "USD")
+          ? "* 단위: USD (SEC EDGAR XBRL 기준, in millions 단위로 보고된 경우 숫자 단위는 백만 달러) · 매출원가·세금은 역산 추정치"
+          : "* 매출원가·판관비·세금은 매출·영업이익·순이익으로부터 역산한 추정치입니다."}
       </p>
     </div>
   );

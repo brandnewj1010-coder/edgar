@@ -185,6 +185,29 @@ export async function loadRecentList(): Promise<RecentItem[]> {
     .sort((a, b) => b.at - a.at);
 }
 
+export async function loadReportByQuery(source: "dart" | "edgar", query: string): Promise<AnalyzeResponse | null> {
+  const q = query.trim();
+  if (isSupabaseConfigured()) {
+    const sb = getSupabase();
+    if (sb) {
+      const { data, error } = await sb
+        .from("analysis_reports")
+        .select("source, query, report_markdown, quiz, meta")
+        .eq("source", source)
+        .ilike("query", q)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!error && data) return rowToResponse(data as DbReportRow);
+    }
+  }
+  const lower = q.toLowerCase();
+  const entry = loadLocalEntries().find(
+    (e) => e.data.source === source && e.data.query.toLowerCase() === lower
+  );
+  return entry ? normalizeAnalyzeResponse(entry.data) : null;
+}
+
 export async function loadReportById(id: string): Promise<AnalyzeResponse | null> {
   if (isSupabaseConfigured()) {
     const sb = getSupabase();
