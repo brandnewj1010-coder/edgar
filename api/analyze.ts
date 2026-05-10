@@ -1,456 +1,450 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
+import { applyRateLimitHeaders, checkRateLimit, getClientIp } from "./_rateLimit.js";
 import {
-  applyRateLimitHeaders,
-  checkRateLimit,
-  getClientIp,
-} from "./_rateLimit";
+  bundleToChartData,
+  bundleToMarkdown,
+  bundleToPromptSnippet,
+  fetchDartFinancialBundle,
+  resolveDartCorp,
+} from "./dart.js";
+import {
+  edgarFinancialsToMarkdown,
+  fetchEdgarFinancials,
+  fetchRecentFilings,
+  resolveEdgarCik,
+} from "./edgar.js";
+import type { QuizItem, FinancialChartData } from "../src/types.js";
 
-/** Vercel 플랜에 따라 상한이 다릅니다(무료 플랜은 더 짧을 수 있음). */
 export const config = { maxDuration: 60 };
 
 type Source = "dart" | "edgar";
+type Body = { source?: string; query?: string };
 
-type Body = {
-  source: Source;
-  query: string;
-  /** 함께 비교할 두 번째 기업(또는 티커) */
-  compareWith?: string;
-  /** 비교할 회계 연도 목록 (예: 2023, 2024, 2025) */
-  fiscalYears?: number[];
-};
+const MIN_REPORT_CHARS = 180;
 
-function buildAnalysisPrompt(
-  source: Source,
-  query: string,
-  opts: { compareWith?: string; fiscalYears?: number[] },
-): string {
-  const q = query.trim();
-  const compare = opts.compareWith?.trim();
-  const years = (opts.fiscalYears ?? [])
-    .filter((y) => typeof y === "number" && y >= 1990 && y <= 2100)
-    .sort((a, b) => a - b);
-
-  const yearBlock =
-    years.length > 0
-      ? `\n[연도 비교 요청]\n다음 연도를 **한눈에 비교**할 수 있도록 표·불릿을 활용하세요: ${years.join(", ")}년. 가능하면 동일 지표(매출, 영업이익, 당기순이익, 주요 비용 등)를 나란히 배치하세요.\n`
-      : "";
-
-  const compareBlock =
-    compare && compare !== q
-      ? `\n[기업 간 비교 요청]\n**A: "${q}"** 와 **B: "${compare}"** 를 같은 기준으로 비교하세요. 표 형식으로 사업·재무·리스크 차이를 정리하고, 마지막에 한 줄 요약을 넣으세요.\n`
-      : "";
-
-  if (source === "dart") {
-    return `당신은 금융 교육용 공시 분석 도우미입니다. **Google 검색 도구**를 사용해 최신 공개 정보를 반영하세요.
-
-[국내 DART / 금융감독원 전자공시]
-사용자 입력: "${q}" (6자리 종목코드 또는 기업명)
-${compareBlock}${yearBlock}
-지침:
-- 최근 사업보고서·반기·분기보고서 등 정기공시 맥락에서 검색으로 확인할 수 있는 정보를 바탕으로 교육 목적의 분석 리포트를 작성하세요.
-- **간결하게** 작성하세요(각 섹션 과도한 장문은 피하고, 핵심 위주).
-- 원문 PDF 전체를 직접 읽을 수는 없을 수 있으므로, 검색 결과와 일반적으로 알려진 공시 구조·용어를 활용하고, 불확실한 부분은 반드시 "검색·교육용 요약"임을 밝히세요.
-- 투자 권유나 매수·매도 추천은 하지 마세요.
-
-출력 형식: **마크다운**, 한국어, 다음 섹션을 포함하세요.
-# 개요
-# 핵심 재무·사업 포인트 (가능하면 간단한 표)
-# 현금흐름·재무건전성 관점
-# 리스크·주의사항
-# 핵심 용어 학습 (EBITDA, 영업이익, 부채비율, 유동비율, 영업활동현금흐름 등 해당되는 용어를 설명과 함께 나열)
-
-⚠ 본문 시작 전, 첫 줄에 다음 형식의 **헤드라인 한 줄**을 넣으세요:
-> HEADLINE: <60자 이내 한 줄 비유·요약>
-
-- 회사를 처음 보는 사람에게 "한 줄로 설명한다면" 톤.
-- 비유나 메타포 1개 권장(강제 아님).
-- 따옴표·이모지 사용 금지. 한국어로 한 줄.
-- 그 다음 줄부터 \`# 개요\` 등 본문 헤딩 시작.
-
-전문 용어는 처음 등장 시 짧게 풀어쓰기.`;
+// ── 퀴즈 파싱 헬퍼 ──────────────────────────────────────────────────────────
+function parseQuizBlock(text: string): QuizItem[] {
+  const quiz: QuizItem[] = [];
+  // JSON 코드 블록에서 파싱 시도
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (
+            typeof item.question === "string" &&
+            Array.isArray(item.choices) &&
+            typeof item.correctIndex === "number"
+          ) {
+            quiz.push({
+              question: item.question,
+              choices: item.choices.map(String),
+              correctIndex: item.correctIndex,
+              explanation: typeof item.explanation === "string" ? item.explanation : undefined,
+            });
+          }
+        }
+      }
+    } catch { /* ignore */ }
   }
-
-  return `You are an educational financial disclosure assistant. **Use Google Search** for recent public information.
-
-[US SEC EDGAR context]
-Primary ticker/symbol: "${q}"
-${compare ? `\nAlso compare with: "${compare}" (same report structure, side-by-side where possible).\n` : ""}${yearBlock ? `\nInclude fiscal year comparison for: ${years.join(", ")}.\n` : ""}
-Rules:
-- Educational tone for Korean university students; write the final report in **Korean**.
-- Be **concise** (avoid overly long paragraphs).
-- No buy/sell recommendations.
-- If uncertain, state uncertainty clearly.
-
-Output: **Markdown** with sections:
-# 개요
-# 핵심 사업·재무 포인트 (간단한 표 가능)
-# 현금흐름·재무건전성
-# 리스크·주의사항
-# 핵심 용어 학습 (영문 약어 병기)
-
-Use clear headings and bullet points where helpful.
-
-At the very first line of your output, include a HEADLINE line in this exact format:
-> HEADLINE: <Korean one-liner, 60 chars or fewer>
-
-- Optional metaphor; concise; no quotes or emojis.
-- The markdown report (\`# 개요\` …) starts on the next line.`;
+  return quiz;
 }
 
-function normalizeQuizItems(raw: unknown): {
-  question: string;
-  choices: string[];
-  correctIndex: number;
-}[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item) => {
-      const o = item as Record<string, unknown>;
-      const question = String(o.question ?? "");
-      const choices = Array.isArray(o.choices)
-        ? o.choices.map((c) => String(c))
-        : [];
-      const correctIndex = Number(o.correctIndex ?? 0);
-      if (!question || choices.length < 2) return null;
-      return { question, choices, correctIndex };
-    })
-    .filter(Boolean) as {
-    question: string;
-    choices: string[];
-    correctIndex: number;
-  }[];
+// ── DART 프롬프트 ─────────────────────────────────────────────────────────────
+function buildDartPrompt(q: string, dartContext: string | null): string {
+  const name = q.trim();
+  const dataBlock = dartContext
+    ? `
+[오픈다트에서 불러온 실제 공시 수치]
+${dartContext}
+
+위 표의 계정명·금액만 근거로 해설하세요. 표에 없는 숫자·추정 실적은 쓰지 마세요.
+`
+    : `(참고: DART 실시간 공시 표를 가져오지 못했습니다. 교육용 일반 설명으로만 작성하세요.)`;
+
+  return `당신은 **HR 실무자**를 위한 공시 기반 재무 회계 스터디 도우미입니다.
+${dataBlock}
+
+분석 대상: "${name}" (기업명 또는 6자리 종목코드)
+
+**출력 형식**: 아래 순서대로 마크다운 한 덩어리만. 빈 섹션 금지. 각 섹션에 실질적인 내용 필수.
+
+# 이 공시에서 잡을 핵심 줄기
+(HR 실무자 관점에서 이 기업의 재무 공시를 왜 봐야 하는지 2~3문장)
+
+# 손익·이익률 — HR 실무자가 물어볼 질문 3가지
+(인건비·조직 비용이 어떻게 손익에 영향을 주는지 포함)
+
+# 재무 건전성·현금 (핵심만)
+(위 표의 자산·부채·현금흐름 계정 인용, HR 관점 코멘트 포함)
+
+# HR KPI ↔ 재무 지표 상관 분석
+공시 수치가 있으면 아래 항목을 **수치와 함께** 분석하세요. 수치가 없으면 산식과 의미만:
+- 인건비율 (인건비 / 매출액 %)
+- 인당 영업이익 (영업이익 ÷ 직원수)
+- 인당 매출 (매출액 ÷ 직원수)
+- 임원 최대 보수 vs 직원 평균 급여 비교 (Pay Ratio 추정)
+- 전년 대비 인력 변화와 수익성 변화의 상관관계
+
+# 오늘의 HR 재무 용어 5개
+(HR 실무자가 공시에서 자주 접하는 용어, 짧은 정의 + 공시에서 어디서 보이는지)
+
+# 다음에 DART에서 더 볼 곳
+(임원 현황, 직원 현황, 주요 계약, 내부통제 등 HR 관련 섹션 안내)
+
+---
+
+규칙:
+- 투자 권유·매수·매도 추천 금지
+- 불확실하면 "교육용 요약"임을 밝히기
+- HR 실무자에게 의미 있는 해석 중심으로`;
 }
 
-function normalizeReflection(raw: unknown): {
-  title: string;
-  prompt: string;
-}[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item) => {
-      const o = item as Record<string, unknown>;
-      const title = String(o.title ?? "").trim();
-      const prompt = String(o.prompt ?? "").trim();
-      if (!title || !prompt) return null;
-      return { title, prompt };
-    })
-    .filter(Boolean) as { title: string; prompt: string }[];
+// ── EDGAR 프롬프트 ─────────────────────────────────────────────────────────────
+function buildEdgarPrompt(q: string, edgarContext: string | null): string {
+  const name = q.trim();
+  const dataBlock = edgarContext
+    ? `
+[SEC EDGAR에서 불러온 실제 공시 수치]
+${edgarContext}
+`
+    : `(참고: EDGAR 실시간 수치를 가져오지 못했습니다. 일반 교육용 설명으로만 작성하세요.)`;
+
+  return `You are a study assistant for **HR professionals** learning US corporate financial disclosures.
+${dataBlock}
+
+Target company: "${name}"
+
+Output **Markdown only**, in Korean. No empty sections.
+
+# 이 공시에서 HR 실무자가 잡을 핵심
+(2~3 sentences from an HR perspective)
+
+# 손익계산서 — HR 담당자가 물어볼 질문 3가지
+(include labor cost/compensation impact)
+
+# 재무 건전성 & 현금흐름
+(key metrics with HR-relevant commentary)
+
+# HR KPI ↔ 재무 지표 상관 분석
+If data is available, include with numbers. If not, explain the formula and significance:
+- Labor Cost Ratio (Labor Cost / Revenue %)
+- Revenue per Employee
+- Operating Income per Employee
+- CEO Pay Ratio (if from proxy data)
+- Headcount trend vs profitability trend
+
+# 오늘의 HR 재무 용어 5개
+(terms HR practitioners see in US filings: Proxy Statement, DEF 14A, NEO, Say-on-Pay, TSR, etc.)
+
+# EDGAR에서 더 볼 곳
+(10-K, DEF 14A sections relevant to HR: employee counts, executive comp, risk factors)
+
+---
+No investment advice. Say "교육용 요약" if uncertain.`;
 }
 
-type SankeyNormalized = {
-  title?: string;
-  unit?: string;
-  nodes: Array<{
-    id: string;
-    label: string;
-    category?: "revenue" | "profit" | "expense" | "neutral";
-  }>;
-  links: Array<{ source: string; target: string; value: number }>;
-};
+// ── Fallback 프롬프트 ─────────────────────────────────────────────────────────
+function buildFallbackPrompt(source: Source, q: string): string {
+  const name = q.trim() || "해당 기업";
+  if (source === "dart") {
+    return `HR 실무자를 위해 "${name}" 관련 공시·재무제표 읽는 법을 마크다운으로 안내하세요.
+각 섹션에 최소 4문장 이상. HR 관점의 해석 포함.
 
-function normalizeSankey(raw: unknown): SankeyNormalized | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  const nodesRaw = o.nodes;
-  const linksRaw = o.links;
-  if (!Array.isArray(nodesRaw) || !Array.isArray(linksRaw)) return null;
+# 공시를 HR 실무자가 보는 이유
+# 손익계산서에서 먼저 볼 줄 (인건비 관련)
+# 재무상태표·비율 감 잡기
+# 현금흐름표와 순이익이 다른 이유
+# HR KPI와 재무 지표의 연결 고리
+# DART 들어가서 찾는 순서 (단계별)
+# 오늘 외울 HR 재무 용어 6개
 
-  const nodes = nodesRaw
-    .map((n) => {
-      const x = n as Record<string, unknown>;
-      const id = String(x.id ?? "").trim();
-      const label = String(x.label ?? x.id ?? "").trim();
-      if (!id || !label) return null;
-      const cat = x.category;
-      const category =
-        cat === "revenue" ||
-        cat === "profit" ||
-        cat === "expense" ||
-        cat === "neutral"
-          ? cat
-          : undefined;
-      return { id, label, category };
-    })
-    .filter(Boolean) as SankeyNormalized["nodes"];
+교육용. 투자 권유 금지.`;
+  }
+  return `Help HR practitioners understand "${name}" US SEC filings in Korean markdown.
+At least 4 sentences per section.
 
-  const links = linksRaw
-    .map((l) => {
-      const x = l as Record<string, unknown>;
-      const source = String(x.source ?? "").trim();
-      const target = String(x.target ?? "").trim();
-      const value = Number(x.value);
-      if (!source || !target || !Number.isFinite(value) || value <= 0)
-        return null;
-      return { source, target, value };
-    })
-    .filter(Boolean) as SankeyNormalized["links"];
+# Why HR pros should read filings
+# Income statement first passes (labor cost focus)
+# Balance sheet ratios
+# Cash flow vs net income
+# HR KPI to financial metric connections
+# EDGAR navigation steps
+# Six HR finance terms today
 
-  if (nodes.length < 2 || links.length < 1) return null;
-
-  const ids = new Set(nodes.map((n) => n.id));
-  const okLinks = links.filter((l) => ids.has(l.source) && ids.has(l.target));
-  if (okLinks.length < 1) return null;
-
-  return {
-    title: typeof o.title === "string" ? o.title : undefined,
-    unit: typeof o.unit === "string" ? o.unit : undefined,
-    nodes,
-    links: okLinks,
-  };
+No investment advice.`;
 }
 
-function extractHeadline(markdown: string): {
-  headline: string;
-  rest: string;
-} {
-  const lines = markdown.split(/\r?\n/);
-  for (let i = 0; i < Math.min(lines.length, 4); i++) {
-    const line = lines[i] ?? "";
-    const m = line.match(/^>\s*HEADLINE\s*[:：]\s*(.+)$/i);
-    if (m) {
-      const headline = (m[1] ?? "")
-        .trim()
-        .replace(/^["“”']+|["“”']+$/g, "")
-        .slice(0, 80);
-      const rest = lines
-        .slice(0, i)
-        .concat(lines.slice(i + 1))
-        .join("\n")
-        .replace(/^\s+/, "");
-      return { headline, rest };
+// ── 퀴즈 생성 프롬프트 ────────────────────────────────────────────────────────
+function buildQuizPrompt(reportMarkdown: string, company: string): string {
+  const snippet = reportMarkdown.slice(0, 3000);
+  return `다음 재무 공시 해설 리포트를 바탕으로 HR 실무자를 위한 **객관식 퀴즈 4문제**를 만드세요.
+
+리포트 (일부):
+---
+${snippet}
+---
+
+출력 형식: JSON 코드 블록만. 다른 텍스트 없이.
+\`\`\`json
+[
+  {
+    "question": "질문 텍스트",
+    "choices": ["선택지A", "선택지B", "선택지C", "선택지D"],
+    "correctIndex": 0,
+    "explanation": "정답 이유 한 문장"
+  }
+]
+\`\`\`
+
+조건:
+- 기업명: ${company}
+- 재무 공시에서 파악할 수 있는 내용만
+- HR 실무자가 알아야 할 내용 중심 (인건비·임원보수·수익성 등)
+- 난이도 적절 (너무 쉽거나 어렵지 않게)
+- correctIndex는 0~3 정수`;
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function chatWithRetry(
+  client: OpenAI,
+  params: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+  maxRetries = 2,
+): Promise<OpenAI.Chat.ChatCompletion> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await client.chat.completions.create(params);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const retryable =
+        msg.includes("429") ||
+        msg.includes("503") ||
+        /rate limit|overloaded|temporarily unavailable/i.test(msg);
+      if (retryable && attempt < maxRetries) {
+        await sleep((attempt + 1) * 5000);
+        continue;
+      }
+      throw e;
     }
   }
-  return { headline: "", rest: markdown };
+  throw new Error("Max retries exceeded");
 }
 
-function parseQuizFromModelText(text: string): {
-  question: string;
-  choices: string[];
-  correctIndex: number;
-}[] {
-  const cleaned = text
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-  const parsed = JSON.parse(cleaned) as { quiz?: unknown };
-  return normalizeQuizItems(parsed.quiz);
+function extractMessageText(completion: OpenAI.Chat.ChatCompletion): string {
+  const c = completion.choices?.[0]?.message?.content;
+  return typeof c === "string" ? c.trim() : "";
 }
-
-const EXTRAS_SCHEMA_HINT = `{
-  "quiz": [{"question":"","choices":["","","",""],"correctIndex":0}],
-  "reflection": [{"title":"","prompt":""}],
-  "sankey": {
-    "title": "",
-    "unit": "억 원",
-    "nodes": [{"id":"","label":"","category":"revenue|profit|expense|neutral"}],
-    "links": [{"source":"","target":"","value":0}]
-  }
-}`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    res.status(204).end();
-    return;
-  }
-
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const ip = getClientIp(req);
-  const rl = checkRateLimit(ip);
-  applyRateLimitHeaders(res, rl);
-  if (!rl.allowed) {
-    const resetIn = Math.max(
-      1,
-      Math.ceil((rl.resetAt - Date.now()) / 1000 / 60),
-    );
-    res.status(429).json({
-      error: `오늘의 분석 횟수를 모두 사용했어요 (하루 ${rl.limit}건). 약 ${resetIn}분 뒤 다시 시도해 주세요.`,
-    });
-    return;
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    res.status(500).json({
-      error: "GEMINI_API_KEY가 서버 환경 변수에 설정되지 않았습니다.",
-    });
-    return;
-  }
-
-  /** 기본은 검색 그라운딩 호환을 고려한 Flash. 더 빠른 모델은 \`GEMINI_MODEL\`로 지정(계정·지역별 지원 다름). */
-  const model =
-    process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash";
-
-  let body: Body;
   try {
-    body =
-      typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-  } catch {
-    res.status(400).json({ error: "잘못된 JSON 본문입니다." });
-    return;
-  }
+    if (req.method === "OPTIONS") { res.status(204).end(); return; }
+    if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
 
-  const source = body.source === "edgar" ? "edgar" : "dart";
-  const query = String(body.query ?? "").trim();
-  if (!query) {
-    res.status(400).json({ error: "검색어(기업명·종목코드 또는 티커)를 입력하세요." });
-    return;
-  }
-
-  const compareWithRaw = body.compareWith != null ? String(body.compareWith).trim() : "";
-  const compareWith = compareWithRaw || undefined;
-
-  const fiscalYears = Array.isArray(body.fiscalYears)
-    ? body.fiscalYears
-        .map((y) => Number(y))
-        .filter((y) => Number.isFinite(y))
-    : undefined;
-
-  const ai = new GoogleGenAI({ apiKey });
-
-  try {
-    const userPrompt = buildAnalysisPrompt(source, query, {
-      compareWith,
-      fiscalYears: fiscalYears ?? [],
-    });
-
-    const analysis = await ai.models.generateContent({
-      model,
-      contents: userPrompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
-
-    const rawMarkdown =
-      analysis.text?.trim() ??
-      analysis.candidates?.[0]?.content?.parts
-        ?.map((p) => ("text" in p ? p.text : ""))
-        .join("\n")
-        .trim() ??
-      "";
-
-    const { headline, rest: reportMarkdown } = extractHeadline(rawMarkdown);
-
-    if (!reportMarkdown) {
-      res.status(502).json({ error: "모델 응답이 비어 있습니다." });
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(ip);
+    applyRateLimitHeaders(res, rl);
+    if (!rl.allowed) {
+      const resetIn = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000 / 60));
+      res.status(429).json({ error: `오늘의 분석 횟수를 모두 사용했어요 (하루 ${rl.limit}건). 약 ${resetIn}분 뒤 다시 시도해 주세요.` });
       return;
     }
 
-    const cand = analysis.candidates?.[0] as
-      | {
-          groundingMetadata?: {
-            webSearchQueries?: string[];
-            groundingChunks?: Array<{ web?: { uri?: string; title?: string } }>;
-          };
-        }
-      | undefined;
-    const gm = cand?.groundingMetadata;
-    const groundingQueries = gm?.webSearchQueries ?? [];
-    const chunks = gm?.groundingChunks ?? [];
-    const sources = chunks
-      .map((c) => {
-        const w = c.web;
-        if (!w?.uri) return null;
-        return { title: w.title ?? "", uri: w.uri };
-      })
-      .filter(Boolean) as { title: string; uri: string }[];
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey?.trim()) {
+      res.status(500).json({ error: "OPENAI_API_KEY가 서버 환경 변수에 설정되지 않았습니다." });
+      return;
+    }
 
-    /** 퀴즈·생각 과제·샌키를 한 번에 생성해 왕복 1회로 단축 */
-    const slice = reportMarkdown.slice(0, 10000);
-    const extrasPrompt = `아래는 공시 분석 리포트(마크다운)입니다. 이 내용만을 근거로 JSON 한 덩어리를 출력하세요.
+    const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
 
-규칙:
-- quiz: 객관식 **정확히 4문항**. 한국어, 각 4지선다, correctIndex는 0~3 정수.
-- reflection: 서술형 **생각해볼 과제 3개**. 각각 title(짧게), prompt(구체적 질문·토론 과제). 객관식과 중복되지 않게.
-- sankey: 리포트에 나온 **숫자·비중**이 있으면 활용해 매출(또는 총수입)→비용/이익 쪽으로 흐르는 샌키 다이어그램용 데이터를 만드세요. 숫자가 불명확하면 교육용으로 **대표적인 구조만** 대략적인 수치로 채우되, unit에 단위를 명시하세요.
-- nodes[].category: revenue(매출·수익원)=파란 계열, profit(이익)=초록, expense(비용)=빨강, neutral(합계·중간)=회색 구분용.
-- links의 source/target은 반드시 nodes[].id와 일치.
-
-스키마 예시:
-${EXTRAS_SCHEMA_HINT}
-
-리포트:
----
-${slice}
----
-
-반드시 **JSON만** 출력(설명 문장 없음).`;
-
-    const extrasRes = await ai.models.generateContent({
-      model,
-      contents: extrasPrompt,
-      config: {
-        responseMimeType: "application/json",
-        maxOutputTokens: 8192,
-      },
-    });
-
-    const extrasText = extrasRes.text?.trim() ?? "";
-    let quiz = normalizeQuizItems([]);
-    let reflectionPrompts: { title: string; prompt: string }[] = [];
-    let sankey: ReturnType<typeof normalizeSankey> = null;
-
+    let body: Body;
     try {
-      const parsed = JSON.parse(extrasText) as {
-        quiz?: unknown;
-        reflection?: unknown;
-        sankey?: unknown;
-      };
-      quiz = normalizeQuizItems(parsed.quiz);
-      reflectionPrompts = normalizeReflection(parsed.reflection);
-      sankey = normalizeSankey(parsed.sankey);
+      body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
     } catch {
-      try {
-        const parsed2 = JSON.parse(
-          extrasText.replace(/^```json\s*/i, "").replace(/\s*```$/i, ""),
-        ) as { quiz?: unknown; reflection?: unknown; sankey?: unknown };
-        quiz = normalizeQuizItems(parsed2.quiz);
-        reflectionPrompts = normalizeReflection(parsed2.reflection);
-        sankey = normalizeSankey(parsed2.sankey);
-      } catch {
+      res.status(400).json({ error: "잘못된 JSON 본문입니다." });
+      return;
+    }
+
+    const source = body.source === "edgar" ? "edgar" : "dart";
+    const query = String(body.query ?? "").trim();
+    if (!query) {
+      res.status(400).json({ error: "검색어(기업명·종목코드 또는 티커)를 입력하세요." });
+      return;
+    }
+
+    // ── 데이터 수집 ─────────────────────────────────────────────────────────
+    let dartTablesMarkdown = "";
+    let dartPromptSnippet: string | null = null;
+    let chartData: FinancialChartData | null = null;
+    const sources: { title: string; uri: string }[] = [];
+
+    if (source === "dart") {
+      const dartKey = process.env.DART_API_KEY?.trim();
+      if (dartKey) {
         try {
-          quiz = parseQuizFromModelText(extrasText);
-        } catch {
-          quiz = [];
+          const corp = await resolveDartCorp(query, dartKey);
+          if (!corp) {
+            res.status(400).json({
+              error: "상장사를 찾지 못했습니다. **6자리 종목코드**(예: 005930)로 다시 검색해 보세요.",
+            });
+            return;
+          }
+          const bundle = await fetchDartFinancialBundle(dartKey, corp);
+          dartTablesMarkdown = bundleToMarkdown(bundle);
+          dartPromptSnippet = bundleToPromptSnippet(bundle);
+          chartData = bundleToChartData(bundle);
+          sources.push(
+            { title: "오픈다트 (금융감독원 전자공시)", uri: "https://opendart.fss.or.kr/" },
+            { title: "DART 공시시스템", uri: "https://dart.fss.or.kr/" },
+          );
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error("[analyze dart]", msg);
+          res.status(502).json({
+            error: "오픈다트에서 재무제표를 가져오지 못했습니다. DART_API_KEY·기업 지정이 맞는지 확인하거나 잠시 후 다시 시도해 주세요.",
+            detail: msg,
+          });
+          return;
         }
+      }
+    } else {
+      // EDGAR
+      try {
+        const company = await resolveEdgarCik(query);
+        if (company) {
+          const [financials, filings] = await Promise.allSettled([
+            fetchEdgarFinancials(company.cik),
+            fetchRecentFilings(company.cik, ["10-K", "DEF 14A"], 6),
+          ]);
+          const cd = financials.status === "fulfilled" ? financials.value : null;
+          const fl = filings.status === "fulfilled" ? filings.value : [];
+          if (cd) {
+            chartData = cd;
+            dartTablesMarkdown = edgarFinancialsToMarkdown(cd, fl);
+            dartPromptSnippet = dartTablesMarkdown;
+            sources.push(
+              { title: "SEC EDGAR", uri: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${company.cik}&type=10-K` },
+              { title: "EDGAR XBRL Viewer", uri: `https://data.sec.gov/submissions/CIK${company.cik}.json` },
+            );
+          }
+        }
+      } catch (e) {
+        console.warn("[analyze edgar]", e instanceof Error ? e.message : e);
+        // EDGAR 실패는 soft fail — OpenAI only로 계속
       }
     }
 
-    const displayQuery =
-      compareWith && compareWith !== query
-        ? `${query} vs ${compareWith}`
-        : query;
+    const client = new OpenAI({ apiKey });
 
-    res.status(200).json({
-      reportMarkdown,
-      headline,
-      quiz,
-      reflectionPrompts,
-      sankey,
-      groundingQueries,
-      sources,
-      model,
-      source,
-      query: displayQuery,
-      compareWith,
-      fiscalYears: fiscalYears?.length ? fiscalYears : undefined,
-    });
+    try {
+      // ── 메인 리포트 생성 ───────────────────────────────────────────────────
+      const primaryPrompt =
+        source === "dart"
+          ? buildDartPrompt(query, dartPromptSnippet)
+          : buildEdgarPrompt(query, dartPromptSnippet);
+
+      let completion = await chatWithRetry(client, {
+        model,
+        messages: [{ role: "user", content: primaryPrompt }],
+        max_tokens: 4096,
+      });
+
+      let reportMarkdown = extractMessageText(completion);
+      let usedFallback = false;
+
+      const hasDartTables = dartTablesMarkdown.length > 400;
+      const minLen = hasDartTables ? 80 : MIN_REPORT_CHARS;
+
+      if (reportMarkdown.length < minLen) {
+        usedFallback = true;
+        completion = await chatWithRetry(client, {
+          model,
+          messages: [{ role: "user", content: buildFallbackPrompt(source, query) }],
+          max_tokens: 4096,
+        });
+        reportMarkdown = extractMessageText(completion);
+      }
+
+      if (!reportMarkdown.trim()) {
+        if (dartTablesMarkdown.length > 200) {
+          reportMarkdown = "*AI 해설 문단은 비어 있었습니다. 위의 공시 표를 먼저 확인해 주세요.*";
+        } else {
+          res.status(502).json({ error: "모델 응답이 비어 있습니다. 잠시 후 다시 시도해 주세요." });
+          return;
+        }
+      }
+
+      if (usedFallback && !hasDartTables) {
+        reportMarkdown += `\n\n---\n*위 본문은 짧은 응답이 나와 **보조 설명**으로 다시 생성한 것입니다.*\n`;
+      } else if (usedFallback && hasDartTables) {
+        reportMarkdown += `\n\n---\n*AI 해설이 짧아 보조 생성을 한 단계 더 거쳤습니다.*\n`;
+      }
+
+      if (dartTablesMarkdown) {
+        reportMarkdown = `${dartTablesMarkdown}\n\n---\n\n## AI 해설 노트\n\n${reportMarkdown}`;
+      }
+
+      // ── 퀴즈 생성 (별도 호출) ─────────────────────────────────────────────
+      let quiz: QuizItem[] = [];
+      try {
+        const quizCompletion = await chatWithRetry(client, {
+          model,
+          messages: [{ role: "user", content: buildQuizPrompt(reportMarkdown, query) }],
+          max_tokens: 1200,
+        });
+        const quizText = extractMessageText(quizCompletion);
+        quiz = parseQuizBlock(quizText);
+      } catch (e) {
+        console.warn("[analyze quiz gen]", e instanceof Error ? e.message : e);
+        // 퀴즈 생성 실패는 soft fail
+      }
+
+      res.status(200).json({
+        reportMarkdown,
+        quiz,
+        reflectionPrompts: [],
+        sankey: null,
+        chartData,
+        groundingQueries: [],
+        sources,
+        model: usedFallback ? `${model} (fallback)` : model,
+        source,
+        query,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error("[analyze]", message);
+      if (dartTablesMarkdown.length > 200) {
+        res.status(200).json({
+          reportMarkdown: `${dartTablesMarkdown}\n\n---\n\n## AI 해설\n\n*OpenAI 단계에서 오류가 났습니다. 위 표는 공시 원문입니다.*\n\n\`${message.replace(/`/g, "'")}\``,
+          quiz: [],
+          reflectionPrompts: [],
+          sankey: null,
+          chartData,
+          groundingQueries: [],
+          sources,
+          model: `${model} (OpenAI 오류, 표만 성공)`,
+          source,
+          query,
+        });
+        return;
+      }
+      res.status(500).json({ error: "분석 중 오류가 발생했습니다.", detail: message });
+    }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    console.error("[analyze]", message);
-    res.status(500).json({
-      error: "분석 중 오류가 발생했습니다.",
-      detail: message,
-    });
+    console.error("[analyze unhandled]", message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "서버에서 처리하지 못했습니다.", detail: message });
+    }
   }
 }
