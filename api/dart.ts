@@ -185,19 +185,19 @@ export async function resolveDartCorp(
   const q = query.trim();
   if (!q) return null;
 
-  // 1. 숫자 → 종목코드로 XML 조회 (corp_code는 XML이 정본)
+  // 1. 숫자 → 종목코드로 하드코딩 테이블 우선, 없으면 XML
   if (/^\d{1,6}$/.test(q)) {
     const code = q.padStart(6, "0");
+    const hardcoded = DART_CORP_BY_STOCK[code];
+    if (hardcoded) return hardcoded;
     const xml = await loadCorpXml(crtfc_key);
-    return findCorpInXml(code, xml) ?? DART_CORP_BY_STOCK[code] ?? null;
+    return findCorpInXml(code, xml);
   }
 
-  // 2. alias 테이블 → 종목코드 확정 후 XML로 정확한 corp_code 조회
-  // 하드코딩 corp_code는 틀릴 수 있으므로 XML을 정본으로 사용
+  // 2. alias 테이블 → 하드코딩 테이블로 즉시 반환 (XML 다운로드 불필요)
   const stockCode = lookupAlias(q);
   if (stockCode) {
-    const xml = await loadCorpXml(crtfc_key);
-    return findCorpInXml(stockCode, xml) ?? DART_CORP_BY_STOCK[stockCode] ?? null;
+    return DART_CORP_BY_STOCK[stockCode] ?? null;
   }
 
   // 3. XML 전체 검색 (한글 회사명 직접 타이핑)
@@ -210,9 +210,11 @@ export async function loadCorpXml(crtfc_key: string): Promise<string> {
   const url = `${BASE}/corpCode.xml?crtfc_key=${encodeURIComponent(crtfc_key)}`;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), CORP_FETCH_MS);
-  let res: Response;
+  let buf: Uint8Array;
   try {
-    res = await fetch(url, { signal: ac.signal });
+    const res = await fetch(url, { signal: ac.signal });
+    if (!res.ok) throw new Error(`고유번호 파일 다운로드 실패 (HTTP ${res.status})`);
+    buf = new Uint8Array(await res.arrayBuffer());
   } catch (e) {
     if (e instanceof Error && e.name === "AbortError") {
       throw new Error(
@@ -223,8 +225,6 @@ export async function loadCorpXml(crtfc_key: string): Promise<string> {
   } finally {
     clearTimeout(timer);
   }
-  if (!res.ok) throw new Error(`고유번호 파일 다운로드 실패 (HTTP ${res.status})`);
-  const buf = new Uint8Array(await res.arrayBuffer());
   let xml: string;
   try {
     const unzipped = unzipSync(buf);
