@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import OpenAI from "openai";
+import { applyRateLimitHeaders, checkRateLimit, getClientIp } from "./_rateLimit.js";
 import {
   bundleToChartData,
   bundleToMarkdown,
@@ -247,6 +248,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === "OPTIONS") { res.status(204).end(); return; }
     if (req.method !== "POST") { res.status(405).json({ error: "Method not allowed" }); return; }
+
+    const ip = getClientIp(req);
+    const rl = checkRateLimit(ip);
+    applyRateLimitHeaders(res, rl);
+    if (!rl.allowed) {
+      const resetIn = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000 / 60));
+      res.status(429).json({ error: `오늘의 분석 횟수를 모두 사용했어요 (하루 ${rl.limit}건). 약 ${resetIn}분 뒤 다시 시도해 주세요.` });
+      return;
+    }
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey?.trim()) {

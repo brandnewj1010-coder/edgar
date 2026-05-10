@@ -37,6 +37,7 @@ export function demoAnalyzeResponse(
   const title = `${label} · ${query || "샘플"}`;
   return {
     reportMarkdown: md(title),
+    headline: "본업이 흔들려도 사이드 비즈니스가 받쳐준 한 해(데모)",
     quiz: [],
     reflectionPrompts: [],
     sankey: null,
