@@ -70,35 +70,113 @@ function extractTag(block: string, tag: string): string {
 const CORP_FETCH_MS = 45_000;
 
 /**
- * 자주 쓰는 종목은 고유번호를 고정해 두고 XML 다운로드를 건너뜀.
+ * 자주 쓰는 종목 고유번호 고정 테이블 — XML 다운로드 없이 즉시 반환.
+ * corp_code: DART 고유번호(8자리), stock_code: KRX 종목코드(6자리).
  */
 const DART_CORP_BY_STOCK: Record<string, DartCorp> = {
-  "005930": { corp_code: "00126380", corp_name: "삼성전자", stock_code: "005930" },
-  "000660": { corp_code: "00164779", corp_name: "SK하이닉스", stock_code: "000660" },
-  "035720": { corp_code: "00104856", corp_name: "카카오", stock_code: "035720" },
-  "035420": { corp_code: "00104204", corp_name: "NAVER", stock_code: "035420" },
-  "000270": { corp_code: "00164742", corp_name: "기아", stock_code: "000270" },
-  "005380": { corp_code: "00164742", corp_name: "현대자동차", stock_code: "005380" },
-  "051910": { corp_code: "00548395", corp_name: "LG화학", stock_code: "051910" },
-  "006400": { corp_code: "00126261", corp_name: "삼성SDI", stock_code: "006400" },
+  "005930": { corp_code: "00126380", corp_name: "삼성전자",       stock_code: "005930" },
+  "000660": { corp_code: "00164779", corp_name: "SK하이닉스",     stock_code: "000660" },
+  "035720": { corp_code: "00104856", corp_name: "카카오",          stock_code: "035720" },
+  "035420": { corp_code: "00104204", corp_name: "NAVER",           stock_code: "035420" },
+  "000270": { corp_code: "00164742", corp_name: "기아",            stock_code: "000270" },
+  "005380": { corp_code: "00105008", corp_name: "현대자동차",      stock_code: "005380" },
+  "051910": { corp_code: "00548395", corp_name: "LG화학",          stock_code: "051910" },
+  "006400": { corp_code: "00126261", corp_name: "삼성SDI",         stock_code: "006400" },
   "207940": { corp_code: "01166928", corp_name: "삼성바이오로직스", stock_code: "207940" },
-  "373220": { corp_code: "01890562", corp_name: "LG에너지솔루션", stock_code: "373220" },
+  "373220": { corp_code: "01890562", corp_name: "LG에너지솔루션",  stock_code: "373220" },
+  "066570": { corp_code: "00401731", corp_name: "LG전자",          stock_code: "066570" },
+  "017670": { corp_code: "00146029", corp_name: "SK텔레콤",        stock_code: "017670" },
+  "005490": { corp_code: "00431263", corp_name: "POSCO홀딩스",     stock_code: "005490" },
+  "068270": { corp_code: "00553234", corp_name: "셀트리온",         stock_code: "068270" },
+  "015760": { corp_code: "00159643", corp_name: "한국전력",         stock_code: "015760" },
+  "030200": { corp_code: "00156360", corp_name: "KT",              stock_code: "030200" },
+  "028260": { corp_code: "00102349", corp_name: "삼성물산",         stock_code: "028260" },
+  "000810": { corp_code: "00126259", corp_name: "삼성화재",         stock_code: "000810" },
+  "090430": { corp_code: "00642807", corp_name: "아모레퍼시픽",    stock_code: "090430" },
+  "352820": { corp_code: "01450869", corp_name: "하이브",           stock_code: "352820" },
+  "259960": { corp_code: "01257973", corp_name: "크래프톤",         stock_code: "259960" },
+  "323410": { corp_code: "01427728", corp_name: "카카오뱅크",       stock_code: "323410" },
+  "003550": { corp_code: "00107897", corp_name: "LG",              stock_code: "003550" },
+  "034730": { corp_code: "00603009", corp_name: "SK",              stock_code: "034730" },
+  "012330": { corp_code: "00164788", corp_name: "현대모비스",       stock_code: "012330" },
+  "032830": { corp_code: "00118228", corp_name: "삼성생명",         stock_code: "032830" },
+  "105560": { corp_code: "00704008", corp_name: "KB금융",           stock_code: "105560" },
+  "086790": { corp_code: "00680937", corp_name: "하나금융지주",     stock_code: "086790" },
+  "055550": { corp_code: "00416950", corp_name: "신한지주",         stock_code: "055550" },
+  "316140": { corp_code: "01388796", corp_name: "우리금융지주",     stock_code: "316140" },
+  "010950": { corp_code: "00164452", corp_name: "S-Oil",           stock_code: "010950" },
+  "096770": { corp_code: "00688996", corp_name: "SK이노베이션",     stock_code: "096770" },
+  "011200": { corp_code: "00164770", corp_name: "HMM",             stock_code: "011200" },
+  "000100": { corp_code: "00106641", corp_name: "유한양행",         stock_code: "000100" },
+  "247540": { corp_code: "01144636", corp_name: "에코프로비엠",     stock_code: "247540" },
+  "086520": { corp_code: "00866545", corp_name: "에코프로",         stock_code: "086520" },
+  "003670": { corp_code: "00108726", corp_name: "포스코퓨처엠",    stock_code: "003670" },
 };
 
+/**
+ * 검색어 → 종목코드 변환 테이블.
+ * 한글 발음 표기·대소문자 변형·약칭·영문명 등을 모두 포함.
+ * 키는 소문자 정규화 후 비교하므로 실제 대소문자는 무관.
+ */
 const DART_CORP_NAME_ALIAS: Record<string, string> = {
-  삼성전자: "005930",
-  SK하이닉스: "000660",
-  카카오: "035720",
-  NAVER: "035420",
-  네이버: "035420",
-  기아: "000270",
-  현대자동차: "005380",
-  현대차: "005380",
-  LG화학: "051910",
-  삼성SDI: "006400",
-  삼성바이오로직스: "207940",
-  LG에너지솔루션: "373220",
+  // 삼성그룹
+  "삼성전자": "005930", "samsung": "005930", "삼성": "005930",
+  "삼성sdi": "006400", "삼성에스디아이": "006400",
+  "삼성바이오로직스": "207940", "삼성바이오": "207940",
+  "삼성물산": "028260", "삼성화재": "000810", "삼성생명": "032830",
+  // SK그룹
+  "sk하이닉스": "000660", "에스케이하이닉스": "000660", "하이닉스": "000660",
+  "sk텔레콤": "017670", "에스케이텔레콤": "017670", "skt": "017670",
+  "sk이노베이션": "096770", "에스케이이노베이션": "096770",
+  "sk": "034730", "에스케이": "034730",
+  // LG그룹
+  "lg전자": "066570", "엘지전자": "066570",
+  "lg화학": "051910", "엘지화학": "051910",
+  "lg에너지솔루션": "373220", "엘지에너지솔루션": "373220", "lges": "373220",
+  "lg": "003550", "엘지": "003550",
+  // 현대그룹
+  "현대자동차": "005380", "현대차": "005380", "hyundai": "005380",
+  "기아": "000270", "kia": "000270",
+  "현대모비스": "012330", "모비스": "012330",
+  // 포스코
+  "posco홀딩스": "005490", "포스코홀딩스": "005490", "포스코": "005490", "posco": "005490",
+  "포스코퓨처엠": "003670",
+  // 카카오·네이버
+  "naver": "035420", "네이버": "035420",
+  "카카오": "035720", "kakao": "035720",
+  "카카오뱅크": "323410",
+  // 금융
+  "kb금융": "105560", "국민은행": "105560", "kb": "105560",
+  "신한지주": "055550", "신한": "055550",
+  "하나금융지주": "086790", "하나금융": "086790", "하나은행": "086790",
+  "우리금융지주": "316140", "우리금융": "316140", "우리은행": "316140",
+  // 통신
+  "kt": "030200",
+  // 에너지
+  "한국전력": "015760", "한전": "015760", "kepco": "015760",
+  "s-oil": "010950", "에스오일": "010950",
+  // 바이오·제약
+  "셀트리온": "068270", "celltrion": "068270",
+  "유한양행": "000100",
+  // 이차전지·소재
+  "에코프로비엠": "247540", "에코프로": "086520",
+  // 해운
+  "hmm": "011200", "현대상선": "011200",
+  // 뷰티·생활
+  "아모레퍼시픽": "090430", "아모레": "090430",
+  // 엔터·게임
+  "하이브": "352820", "hybe": "352820", "빅히트": "352820",
+  "크래프톤": "259960", "krafton": "259960",
 };
+
+/** 쿼리를 정규화해 alias 테이블을 대소문자 무관하게 검색 */
+function lookupAlias(q: string): string | null {
+  const key = q.trim().toLowerCase().replace(/\s+/g, "");
+  const direct = Object.entries(DART_CORP_NAME_ALIAS).find(
+    ([k]) => k.toLowerCase().replace(/\s+/g, "") === key,
+  );
+  return direct ? direct[1] : null;
+}
 
 export async function resolveDartCorp(
   query: string,
@@ -106,16 +184,26 @@ export async function resolveDartCorp(
 ): Promise<DartCorp | null> {
   const q = query.trim();
   if (!q) return null;
+
+  // 1. 숫자 → 종목코드 직접 조회
   if (/^\d{1,6}$/.test(q)) {
     const code = q.padStart(6, "0");
     const direct = DART_CORP_BY_STOCK[code];
     if (direct) return direct;
+    const xml = await loadCorpXml(crtfc_key);
+    return findCorpInXml(code, xml);
   }
-  const alias = DART_CORP_NAME_ALIAS[q];
-  if (alias) {
-    const fromAlias = DART_CORP_BY_STOCK[alias];
-    if (fromAlias) return fromAlias;
+
+  // 2. alias 테이블 (대소문자·공백 무관)
+  const stockCode = lookupAlias(q);
+  if (stockCode) {
+    const direct = DART_CORP_BY_STOCK[stockCode];
+    if (direct) return direct;
+    const xml = await loadCorpXml(crtfc_key);
+    return findCorpInXml(stockCode, xml);
   }
+
+  // 3. XML 전체 검색 (한글 회사명 직접 타이핑)
   const xml = await loadCorpXml(crtfc_key);
   return findCorpInXml(q, xml);
 }
@@ -179,7 +267,10 @@ export function findCorpInXml(query: string, xml: string): DartCorp | null {
     return null;
   }
 
+  // 사명 검색 — 대소문자 무관, 공백 무관, 부분 일치
+  const qLower = q.toLowerCase();
   const compact = q.replace(/\s+/g, "");
+  const compactLower = compact.toLowerCase();
   const candidates: DartCorp[] = [];
   let m: RegExpExecArray | null;
   while ((m = listRe.exec(xml)) !== null) {
@@ -188,17 +279,23 @@ export function findCorpInXml(query: string, xml: string): DartCorp | null {
     const corp_name = extractTag(block, "corp_name");
     const stock_code = extractTag(block, "stock_code").trim();
     if (!corp_code || !corp_name || !/^\d{6}$/.test(stock_code)) continue;
+    const nameLower = corp_name.toLowerCase();
+    const nameCompact = corp_name.replace(/\s+/g, "").toLowerCase();
     if (
       corp_name === q ||
+      nameLower === qLower ||
       corp_name.includes(q) ||
-      corp_name.replace(/\s+/g, "") === compact
+      nameLower.includes(qLower) ||
+      nameCompact === compactLower
     ) {
       candidates.push({ corp_code, corp_name, stock_code });
     }
   }
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
-  const exact = candidates.find((c) => c.corp_name === q);
+  const exact = candidates.find(
+    (c) => c.corp_name === q || c.corp_name.toLowerCase() === qLower,
+  );
   return exact ?? candidates[0];
 }
 

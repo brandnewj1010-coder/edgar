@@ -140,10 +140,23 @@ export type AnalyzeResponse = {
   query: string;
   /** 구조화된 차트 데이터 (DART/EDGAR에서 추출) */
   chartData?: FinancialChartData | null;
-  /** 기업 간 비교 시 상대 기업 */
-  compareWith?: string;
+  /** AI 구조화 인사이트 카드 */
+  insightCards?: InsightCards | null;
   /** 선택된 회계 연도 비교 (예: 2023, 2024, 2025) */
   fiscalYears?: number[];
+};
+
+export type InsightSeverity = "high" | "mid" | "low";
+
+export type InsightCards = {
+  /** 주목할 점 (긍정·부정 혼재) */
+  watchOuts: Array<{ title: string; detail: string; severity: InsightSeverity }>;
+  /** 이상치 자동 코멘트 */
+  anomalies: Array<{ metric: string; note: string; direction: "up" | "down" | "flat" }>;
+  /** 시나리오 분석 */
+  scenarios: Array<{ if: string; then: string }>;
+  /** 강점 요약 */
+  strengths: string[];
 };
 
 export type FinancialTermEntry = {

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { FileText, Loader2, Sparkles, BookOpen, BarChart3, NotebookText } from "lucide-react";
+import { FileText, Loader2, Sparkles, BookOpen, BarChart3 } from "lucide-react";
 import { MarkdownReport } from "./components/MarkdownReport";
-import { LearningSide } from "./components/LearningSide";
 import { Sidebar } from "./components/Sidebar";
 import { FinancialCharts } from "./components/FinancialCharts";
 import { StudyPage } from "./components/StudyPage";
@@ -16,8 +15,10 @@ import { isSupabaseConfigured } from "./lib/supabase";
 import type { AnalyzeResponse, DisclosureSource, QuizItem } from "./types";
 import { ReportDocument } from "./components/ReportDocument";
 import { ReportActions } from "./components/ReportActions";
+import { InsightCards } from "./components/InsightCards";
+import { SankeyFlow } from "./components/SankeyFlow";
 
-type PageView = "report" | "notes" | "study";
+type PageView = "report" | "study";
 
 function analyzeErrorExtraHint(error: string, isLocalhost: boolean): ReactNode {
   const e = error;
@@ -78,9 +79,6 @@ export default function App() {
   const [demoMode, setDemoMode] = useState(
     () => import.meta.env.VITE_USE_DEMO === "1",
   );
-  // 해설노트 탭 — 새 결과가 왔는데 아직 안 봤을 때 뱃지
-  const [notesSeen, setNotesSeen] = useState(true);
-  // 스터디 페이지로 넘길 퀴즈
   const [pendingQuiz, setPendingQuiz] = useState<{
     source: DisclosureSource;
     query: string;
@@ -99,11 +97,8 @@ export default function App() {
     try {
       const data = await requestAnalyze(source, q, { demo: demoMode });
       setResult(data);
-      setNotesSeen(false); // 새 결과 → 해설노트 탭에 뱃지
       await saveReport(data);
       setRecent(await loadRecentList());
-
-      // 퀴즈가 있으면 스터디 페이지에 전달할 pending 저장
       if (data.quiz && data.quiz.length > 0) {
         setPendingQuiz({ source: data.source, query: data.query, questions: data.quiz });
       }
@@ -126,6 +121,27 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [run]);
 
+  // 퀵픽 버튼: query 세팅 + 바로 실행
+  const quickSearch = useCallback(async (q: string) => {
+    setQuery(q);
+    setError(null);
+    setLoading(true);
+    try {
+      const data = await requestAnalyze(source, q, { demo: demoMode });
+      setResult(data);
+      await saveReport(data);
+      setRecent(await loadRecentList());
+      if (data.quiz && data.quiz.length > 0) {
+        setPendingQuiz({ source: data.source, query: data.query, questions: data.quiz });
+      }
+    } catch (e) {
+      setResult(null);
+      setError(e instanceof Error ? e.message : "알 수 없는 오류");
+    } finally {
+      setLoading(false);
+    }
+  }, [source, demoMode]);
+
   const pickRecent = useCallback(async (r: RecentItem) => {
     setSource(r.source);
     setQuery(r.query);
@@ -135,7 +151,6 @@ export default function App() {
       const full = await loadReportById(r.id);
       if (full) {
         setResult(full);
-        setNotesSeen(false);
         setPage("report");
       } else {
         setResult(null);
@@ -152,14 +167,15 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#eceff5] md:flex-row">
-      {/* 사이드바 (리포트 페이지에서만 표시) */}
-      {(page === "report" || page === "notes") && (
+      {/* 사이드바 */}
+      {page === "report" && (
         <Sidebar
           source={source}
           onSource={setSource}
           query={query}
           onQuery={setQuery}
           onSubmit={run}
+          onQuickSearch={quickSearch}
           loading={loading}
           recent={recent}
           onPickRecent={pickRecent}
@@ -178,55 +194,31 @@ export default function App() {
               <Sparkles className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-medium text-slate-500">
-                HR 재무공시 스터디 플랫폼
-              </p>
+              <p className="truncate text-xs font-medium text-slate-500">HR 재무공시 스터디 플랫폼</p>
               <p className="truncate text-sm text-slate-800">
                 OpenAI · DART · EDGAR
                 {result?.model && page === "report" ? (
-                  <span className="ml-1.5 font-mono text-xs font-normal text-slate-400">
-                    · {result.model}
-                  </span>
+                  <span className="ml-1.5 font-mono text-xs font-normal text-slate-400">· {result.model}</span>
                 ) : null}
               </p>
             </div>
           </div>
 
-          {/* 페이지 탭 */}
+          {/* 탭 */}
           <nav className="no-print flex items-center gap-1 rounded-xl bg-slate-100 p-1">
             <button
               onClick={() => setPage("report")}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                page === "report"
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                page === "report" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
               <BarChart3 className="h-3.5 w-3.5" />
               리포트
             </button>
             <button
-              onClick={() => { setPage("notes"); setNotesSeen(true); }}
-              className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                page === "notes"
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <NotebookText className="h-3.5 w-3.5" />
-              해설노트
-              {!notesSeen && result && page !== "notes" && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-emerald-500">
-                  <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                </span>
-              )}
-            </button>
-            <button
               onClick={() => setPage("study")}
               className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                page === "study"
-                  ? "bg-white text-slate-800 shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                page === "study" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
               <BookOpen className="h-3.5 w-3.5" />
@@ -240,18 +232,22 @@ export default function App() {
           </nav>
         </header>
 
-        {/* 콘텐츠 영역 */}
+        {/* 스터디 탭 */}
         {page === "study" ? (
           <StudyPage
             pendingQuiz={pendingQuiz}
             onClearPending={() => setPendingQuiz(null)}
+            lastQuery={(result?.query ?? query.trim()) || undefined}
+            lastChartData={result?.chartData ?? null}
           />
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
+            {/* 고지 */}
             <div className="mx-auto mb-4 max-w-3xl flex items-start gap-2 rounded-lg border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
               <span>InsightAnalyzer는 <b>교육·정보 제공 목적</b>이며, 투자 권유나 매수·매도 추천이 아닙니다. AI 해설은 실제 공시 수치와 차이가 있을 수 있어요.</span>
             </div>
+
             {/* 에러 */}
             {error && (
               <div className="mx-auto mb-6 max-w-3xl rounded-2xl border border-rose-200/90 bg-rose-50/90 px-5 py-4 text-sm text-rose-800 shadow-sm">
@@ -295,111 +291,108 @@ export default function App() {
               </div>
             )}
 
-            {/* 리포트 탭: 차트 + HR KPI */}
-            {result && !loading && page === "report" && (
+            {/* 리포트 */}
+            {result && !loading && (
               <div className={`mx-auto max-w-3xl transition-opacity duration-200 ${restoring ? "pointer-events-none opacity-60" : "opacity-100"}`}>
-                {restoring && (
-                  <p className="mb-3 text-center text-xs font-medium text-indigo-600">불러오는 중…</p>
-                )}
+                {restoring && <p className="mb-3 text-center text-xs font-medium text-indigo-600">불러오는 중…</p>}
 
-                {/* 기업명 + 배지 */}
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
-                    {result.source === "dart" ? "DART" : "EDGAR"}
-                  </span>
-                  {result.model === "demo" && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">데모</span>
-                  )}
-                  <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-                    {result.query}
-                  </h2>
+                {/* 히어로 카드 */}
+                <div className="mb-6 relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm">
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-500" />
+                  <div className="p-5 md:p-6">
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-indigo-800">
+                        {result.source === "dart" ? "DART" : "EDGAR"}
+                      </span>
+                      {result.model === "demo" && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">데모</span>
+                      )}
+                      {result.model?.includes("캐시") && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">캐시</span>
+                      )}
+                    </div>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900" style={{ fontFamily: '"Noto Serif KR", Georgia, serif' }}>
+                      {result.query}
+                    </h1>
+                    {result.headline && (
+                      <p className="mt-3 text-[15px] font-semibold leading-relaxed gradient-headline" style={{ fontFamily: '"Noto Serif KR", Georgia, serif' }}>
+                        &ldquo;{result.headline}&rdquo;
+                      </p>
+                    )}
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {result.quiz && result.quiz.length > 0 && (
+                        <button
+                          onClick={() => setPage("study")}
+                          className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                        >
+                          <BookOpen className="h-3.5 w-3.5" />
+                          퀴즈 {result.quiz.length}문제 풀기 →
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="source-chip">데이터 출처 · {result.source === "dart" ? "DART" : "EDGAR"}</span>
+                      {result.model && result.model !== "demo" && (
+                        <span className="source-chip">AI · {result.model}</span>
+                      )}
+                      <span className="rounded-full px-2.5 py-0.5 text-[11px] bg-slate-100 text-slate-500">교육·정보 제공 목적, 투자 권유 아님</span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* 해설노트 이동 유도 */}
-                <div className="mb-4 flex gap-2">
-                  <button
-                    onClick={() => { setPage("notes"); setNotesSeen(true); }}
-                    className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-                  >
-                    <NotebookText className="h-3.5 w-3.5" />
-                    AI 해설노트 보기
-                  </button>
-                  {result.quiz && result.quiz.length > 0 && (
-                    <button
-                      onClick={() => setPage("study")}
-                      className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
-                    >
-                      <BookOpen className="h-3.5 w-3.5" />
-                      퀴즈 {result.quiz.length}문제 풀기
-                    </button>
-                  )}
-                </div>
+                {/* AI 인사이트 카드 */}
+                {result.insightCards && <InsightCards cards={result.insightCards} />}
 
                 {/* 차트 */}
                 {result.chartData ? (
                   <FinancialCharts chartData={result.chartData} />
                 ) : (
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 px-6 py-12 text-center text-sm text-slate-400">
-                    구조화된 재무 데이터가 없습니다. 해설노트에서 AI 분석을 확인하세요.
+                    구조화된 재무 데이터가 없습니다. AI 해설을 아래에서 확인하세요.
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* 해설노트 탭: AI 마크다운 */}
-            {result && !loading && page === "notes" && (
-              <div className={`mx-auto max-w-3xl transition-opacity duration-200 ${restoring ? "pointer-events-none opacity-60" : "opacity-100"}`}>
-                {restoring && (
-                  <p className="mb-3 text-center text-xs font-medium text-indigo-600">불러오는 중…</p>
+                {/* Sankey */}
+                {result.chartData && (
+                  <div className="mt-4">
+                    <SankeyFlow data={result.chartData} />
+                  </div>
                 )}
 
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
-                    {result.source === "dart" ? "DART" : "EDGAR"}
-                  </span>
-                  {result.model === "demo" && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">데모</span>
-                  )}
-                  {result.model && result.model !== "demo" && (
-                    <span className="font-mono text-xs text-slate-400">{result.model}</span>
-                  )}
-                  <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-                    {result.query}
-                  </h2>
+                {/* AI 해설 마크다운 */}
+                <div className="mt-6">
+                  <ReportActions reportMarkdown={result.reportMarkdown} />
+                  <div className="mt-4">
+                    <ReportDocument>
+                      <MarkdownReport markdown={result.reportMarkdown} />
+                    </ReportDocument>
+                  </div>
                 </div>
 
-                <ReportActions reportMarkdown={result.reportMarkdown} />
-
-                <div className="mt-4">
-                  <ReportDocument>
-                    <MarkdownReport markdown={result.reportMarkdown} />
-                  </ReportDocument>
-                </div>
+                {/* 출처 */}
+                {result.sources && result.sources.length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-400"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                      출처 · 참고 자료
+                    </h3>
+                    <div className="space-y-2">
+                      {result.sources.map((src, i) => (
+                        <a key={i} href={src.uri} target="_blank" rel="noopener noreferrer"
+                          className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm hover:border-indigo-200 hover:bg-indigo-50/40 transition-colors">
+                          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">{i + 1}</span>
+                          <span className="min-w-0 text-slate-700 leading-snug">{src.title}</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 shrink-0 text-slate-300"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
       </main>
-
-      {/* 학습 사이드바 (해설노트 탭에서만) */}
-      {page === "notes" && (
-        <>
-          <aside className="no-print hidden w-[min(100%,22rem)] shrink-0 overflow-hidden bg-ink-50 lg:block">
-            <LearningSide
-              reportMarkdown={result?.reportMarkdown ?? ""}
-              sources={result?.sources ?? []}
-              groundingQueries={result?.groundingQueries ?? []}
-            />
-          </aside>
-          <div className="no-print border-t border-slate-200 bg-ink-50 lg:hidden">
-            <LearningSide
-              reportMarkdown={result?.reportMarkdown ?? ""}
-              sources={result?.sources ?? []}
-              groundingQueries={result?.groundingQueries ?? []}
-            />
-          </div>
-        </>
-      )}
     </div>
   );
 }
