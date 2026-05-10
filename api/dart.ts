@@ -67,21 +67,56 @@ type CorpMap = { byStock: Record<string, CorpMapEntry>; byName: Record<string, s
 let corpMapCache: CorpMap | null = null;
 let corpMapLoaded = false;
 
+function buildCorpMapFromXml(xml: string): CorpMap {
+  const byStock: Record<string, CorpMapEntry> = {};
+  const byName: Record<string, string> = {};
+  const listRe = /<list[^>]*>([\s\S]*?)<\/list>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = listRe.exec(xml)) !== null) {
+    const block = m[1];
+    const corp_code = extractTag(block, "corp_code");
+    const corp_name = extractTag(block, "corp_name");
+    const stock_code = extractTag(block, "stock_code").trim();
+    if (!corp_code || !corp_name || !/^\d{6}$/.test(stock_code)) continue;
+    byStock[stock_code] = { corp_code, corp_name };
+    const key = corp_name.replace(/\s+/g, "").toLowerCase();
+    byName[key] = stock_code;
+    const keyOrig = corp_name.replace(/\s+/g, "");
+    if (keyOrig !== key) byName[keyOrig] = stock_code;
+  }
+  return { byStock, byName };
+}
+
 async function loadCorpMap(): Promise<CorpMap | null> {
   if (corpMapLoaded) return corpMapCache;
   corpMapLoaded = true;
-  const base = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
-  if (!base) return null;
-  try {
-    const res = await fetch(`${base}/corp-map.json`, {
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!res.ok) return null;
-    corpMapCache = (await res.json()) as CorpMap;
-    return corpMapCache;
-  } catch {
-    return null;
+
+  // 1) 빌드타임 생성된 정적 파일 시도 (production URL 우선)
+  const prodUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : null;
+
+  if (prodUrl) {
+    try {
+      const res = await fetch(`${prodUrl}/corp-map.json`, {
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (res.ok) {
+        corpMapCache = (await res.json()) as CorpMap;
+        return corpMapCache;
+      }
+    } catch { /* fall through */ }
   }
+
+  // 2) XML이 이미 캐시돼 있으면 메모리에서 map 빌드 (재다운로드 없음)
+  if (corpXmlCache) {
+    corpMapCache = buildCorpMapFromXml(corpXmlCache);
+    return corpMapCache;
+  }
+
+  return null;
 }
 
 function extractTag(block: string, tag: string): string {
@@ -134,6 +169,30 @@ const DART_CORP_BY_STOCK: Record<string, DartCorp> = {
   "247540": { corp_code: "01144636", corp_name: "에코프로비엠",     stock_code: "247540" },
   "086520": { corp_code: "00866545", corp_name: "에코프로",         stock_code: "086520" },
   "003670": { corp_code: "00108726", corp_name: "포스코퓨처엠",    stock_code: "003670" },
+  // 게임
+  "036570": { corp_code: "00211079", corp_name: "엔씨소프트",      stock_code: "036570" },
+  "251270": { corp_code: "01228485", corp_name: "넷마블",           stock_code: "251270" },
+  "263750": { corp_code: "01451948", corp_name: "펄어비스",         stock_code: "263750" },
+  "112040": { corp_code: "00375525", corp_name: "위메이드",         stock_code: "112040" },
+  "078340": { corp_code: "00203691", corp_name: "컴투스",           stock_code: "078340" },
+  "293490": { corp_code: "01389895", corp_name: "카카오게임즈",    stock_code: "293490" },
+  // 엔터·미디어
+  "041510": { corp_code: "00194329", corp_name: "에스엠",           stock_code: "041510" },
+  "035900": { corp_code: "00117473", corp_name: "JYP Ent.",         stock_code: "035900" },
+  "122870": { corp_code: "00779857", corp_name: "와이지엔터테인먼트", stock_code: "122870" },
+  // 반도체·IT
+  "000990": { corp_code: "00121596", corp_name: "DB하이텍",         stock_code: "000990" },
+  "042700": { corp_code: "00156028", corp_name: "한미반도체",       stock_code: "042700" },
+  // 헬스케어
+  "326030": { corp_code: "01462189", corp_name: "SK바이오팜",       stock_code: "326030" },
+  "196170": { corp_code: "01117264", corp_name: "알테오젠",         stock_code: "196170" },
+  // 기타
+  "071050": { corp_code: "00587523", corp_name: "한국금융지주",     stock_code: "071050" },
+  "180640": { corp_code: "01139218", corp_name: "한진칼",           stock_code: "180640" },
+  "003490": { corp_code: "00107638", corp_name: "대한항공",         stock_code: "003490" },
+  "020560": { corp_code: "00126720", corp_name: "아시아나항공",     stock_code: "020560" },
+  "000720": { corp_code: "00105319", corp_name: "현대건설",         stock_code: "000720" },
+  "028050": { corp_code: "00122472", corp_name: "삼성엔지니어링",   stock_code: "028050" },
 };
 
 /**
@@ -190,6 +249,22 @@ const DART_CORP_NAME_ALIAS: Record<string, string> = {
   // 엔터·게임
   "하이브": "352820", "hybe": "352820", "빅히트": "352820",
   "크래프톤": "259960", "krafton": "259960",
+  "엔씨소프트": "036570", "엔씨": "036570", "ncsoft": "036570", "nc소프트": "036570",
+  "넷마블": "251270", "netmarble": "251270",
+  "펄어비스": "263750", "pearl abyss": "263750",
+  "위메이드": "112040", "wemade": "112040",
+  "컴투스": "078340", "com2us": "078340",
+  "카카오게임즈": "293490", "kakao games": "293490",
+  // 엔터·미디어
+  "에스엠": "041510", "sm엔터": "041510", "sm": "041510",
+  "jyp": "035900", "jyp엔터": "035900",
+  "와이지": "122870", "yjp": "122870", "yg엔터": "122870",
+  // 항공
+  "대한항공": "003490", "koreanair": "003490",
+  "아시아나": "020560", "아시아나항공": "020560", "asiana": "020560",
+  // 건설
+  "현대건설": "000720",
+  "삼성엔지니어링": "028050",
 };
 
 /** 쿼리를 정규화해 alias 테이블을 검색 */

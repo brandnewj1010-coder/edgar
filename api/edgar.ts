@@ -296,7 +296,7 @@ export async function fetchEdgarFinancials(cik: string): Promise<FinancialChartD
     priorPriorYear: priorPriorYear || String(new Date().getFullYear() - 3),
     metrics,
     hrMetrics: Object.keys(hrMetrics).length > 0 ? hrMetrics : undefined,
-    unitNote: "단위: USD (SEC EDGAR XBRL 기준)",
+    unitNote: `단위: USD (SEC EDGAR XBRL 기준 · 회계연도 기준 — ${currentYear || ""}년은 해당 기업의 FY${currentYear || ""} 마감 연도)`,
   };
 }
 

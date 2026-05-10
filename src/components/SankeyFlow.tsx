@@ -20,8 +20,9 @@ function fmtShort(v: number, unit: string): string {
   return `${sign}${Math.round(Math.abs(n)).toLocaleString()}백만`;
 }
 
-function norm(v: number | null | undefined): number | null {
+function norm(v: number | null | undefined, unit = "백만원"): number | null {
   if (v == null) return null;
+  if (unit === "USD") return v;
   return Math.abs(v) > 1_000_000_000 ? v / 1_000_000 : v;
 }
 
@@ -50,10 +51,14 @@ const COLORS = {
 // ── 그래프 빌더 ──────────────────────────────────────────────────────────────
 
 function buildGraph(data: FinancialChartData) {
+  const unit = data.metrics.find((m) =>
+    ["매출액", "Revenue"].includes(m.label),
+  )?.unit ?? "백만원";
+
   const find = (labels: string[]): number | null => {
     for (const label of labels) {
       const m = data.metrics.find((x) => x.label === label);
-      if (m?.current != null) return norm(m.current);
+      if (m?.current != null) return norm(m.current, unit);
     }
     return null;
   };
@@ -65,10 +70,6 @@ function buildGraph(data: FinancialChartData) {
   const interest = find(["이자비용", "Interest Expense", "Labor & Related Expense"]);
 
   if (rev == null || rev <= 0) return null;
-
-  const unit = data.metrics.find((m) =>
-    ["매출액", "Revenue"].includes(m.label),
-  )?.unit ?? "백만원";
 
   const rawNodes: RawNode[] = [];
   const rawLinks: { source: string; target: string; value: number }[] = [];
@@ -381,7 +382,9 @@ export function SankeyFlow({ data }: { data: FinancialChartData }) {
       <SankeyDiagram data={data} />
 
       <p className="text-[10px] text-slate-400">
-        * 매출원가·판관비·세금은 매출·영업이익·순이익으로부터 역산한 추정치입니다.
+        {data.metrics.some((m) => m.unit === "USD")
+          ? "* 단위: USD (SEC EDGAR XBRL 기준, in millions 단위로 보고된 경우 숫자 단위는 백만 달러) · 매출원가·세금은 역산 추정치"
+          : "* 매출원가·판관비·세금은 매출·영업이익·순이익으로부터 역산한 추정치입니다."}
       </p>
     </div>
   );
