@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { FileText, Loader2, Sparkles, BookOpen, BarChart3 } from "lucide-react";
-import { MarkdownReport } from "./components/MarkdownReport";
 import { Sidebar } from "./components/Sidebar";
 import { FinancialCharts } from "./components/FinancialCharts";
 import { StudyPage } from "./components/StudyPage";
@@ -8,13 +7,12 @@ import { requestAnalyze } from "./lib/analyzeApi";
 import {
   loadRecentList,
   loadReportById,
+  loadReportByQuery,
   saveReport,
   type RecentItem,
 } from "./lib/analysisStorage";
 import { isSupabaseConfigured } from "./lib/supabase";
 import type { AnalyzeResponse, DisclosureSource, QuizItem } from "./types";
-import { ReportDocument } from "./components/ReportDocument";
-import { ReportActions } from "./components/ReportActions";
 import { InsightCards } from "./components/InsightCards";
 import { SankeyFlow } from "./components/SankeyFlow";
 
@@ -121,12 +119,21 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [run]);
 
-  // 퀵픽 버튼: query 세팅 + 바로 실행
+  // 퀵픽 버튼: 캐시 우선 → 없으면 API 호출
   const quickSearch = useCallback(async (q: string) => {
     setQuery(q);
     setError(null);
     setLoading(true);
     try {
+      const cached = !demoMode ? await loadReportByQuery(source, q) : null;
+      if (cached) {
+        setResult(cached);
+        setRecent(await loadRecentList());
+        if (cached.quiz && cached.quiz.length > 0) {
+          setPendingQuiz({ source: cached.source, query: cached.query, questions: cached.quiz });
+        }
+        return;
+      }
       const data = await requestAnalyze(source, q, { demo: demoMode });
       setResult(data);
       await saveReport(data);
@@ -310,31 +317,14 @@ export default function App() {
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">캐시</span>
                       )}
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-slate-900" style={{ fontFamily: '"Noto Serif KR", Georgia, serif' }}>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900">
                       {result.query}
                     </h1>
-                    {result.headline && (
-                      <p className="mt-3 text-[15px] font-semibold leading-relaxed gradient-headline" style={{ fontFamily: '"Noto Serif KR", Georgia, serif' }}>
-                        &ldquo;{result.headline}&rdquo;
-                      </p>
-                    )}
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      {result.quiz && result.quiz.length > 0 && (
-                        <button
-                          onClick={() => setPage("study")}
-                          className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
-                        >
-                          <BookOpen className="h-3.5 w-3.5" />
-                          퀴즈 {result.quiz.length}문제 풀기 →
-                        </button>
-                      )}
-                    </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="source-chip">데이터 출처 · {result.source === "dart" ? "DART" : "EDGAR"}</span>
                       {result.model && result.model !== "demo" && (
                         <span className="source-chip">AI · {result.model}</span>
                       )}
-                      <span className="rounded-full px-2.5 py-0.5 text-[11px] bg-slate-100 text-slate-500">교육·정보 제공 목적, 투자 권유 아님</span>
                     </div>
                   </div>
                 </div>
@@ -358,35 +348,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* AI 해설 마크다운 */}
-                <div className="mt-6">
-                  <ReportActions reportMarkdown={result.reportMarkdown} />
-                  <div className="mt-4">
-                    <ReportDocument>
-                      <MarkdownReport markdown={result.reportMarkdown} />
-                    </ReportDocument>
-                  </div>
-                </div>
-
-                {/* 출처 */}
-                {result.sources && result.sources.length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-400"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                      출처 · 참고 자료
-                    </h3>
-                    <div className="space-y-2">
-                      {result.sources.map((src, i) => (
-                        <a key={i} href={src.uri} target="_blank" rel="noopener noreferrer"
-                          className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm hover:border-indigo-200 hover:bg-indigo-50/40 transition-colors">
-                          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">{i + 1}</span>
-                          <span className="min-w-0 text-slate-700 leading-snug">{src.title}</span>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 shrink-0 text-slate-300"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </div>

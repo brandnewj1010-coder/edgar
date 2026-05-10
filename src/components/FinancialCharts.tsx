@@ -13,6 +13,8 @@ import {
 } from "recharts";
 import { BarChart3, Users, TrendingUp, Landmark, Droplets, Percent, Activity, TableProperties } from "lucide-react";
 import type { FinancialChartData, FinancialMetric } from "../types";
+import { FINANCIAL_TERMS } from "../data/financialTerms";
+import { useState as useTooltipState } from "react";
 
 interface Props {
   chartData: FinancialChartData;
@@ -21,7 +23,7 @@ interface Props {
 // ── 수치 포맷 헬퍼 ────────────────────────────────────────────────────────────
 
 function normalizeToBaegmanwon(v: number): number {
-  return Math.abs(v) > 10_000_000_000 ? v / 1_000_000 : v;
+  return Math.abs(v) > 1_000_000_000 ? v / 1_000_000 : v;
 }
 
 function fmtVal(v: number | null, unit: string): string {
@@ -39,7 +41,7 @@ function fmtVal(v: number | null, unit: string): string {
   const abs = Math.abs(n);
   const sign = n < 0 ? "−" : "";
   if (abs >= 1_000_000) return `${sign}${(Math.abs(n) / 1_000_000).toFixed(1)}조`;
-  if (abs >= 10_000)    return `${sign}${Math.round(Math.abs(n) / 10_000).toLocaleString()}억`;
+  if (abs >= 100)       return `${sign}${Math.round(Math.abs(n) / 100).toLocaleString()}억`;
   if (abs >= 1)         return `${sign}${Math.round(Math.abs(n)).toLocaleString()}백만`;
   return `${n.toLocaleString()}백만`;
 }
@@ -55,8 +57,38 @@ function formatYAxis(v: number, unit: string): string {
   const abs = Math.abs(n);
   const sign = n < 0 ? "−" : "";
   if (abs >= 1_000_000) return `${sign}${(Math.abs(n) / 1_000_000).toFixed(0)}조`;
-  if (abs >= 10_000)    return `${sign}${Math.round(Math.abs(n) / 10_000).toLocaleString()}억`;
+  if (abs >= 100)       return `${sign}${Math.round(Math.abs(n) / 100).toLocaleString()}억`;
   return `${sign}${Math.round(Math.abs(n)).toLocaleString()}백만`;
+}
+
+// ── 용어 툴팁 ────────────────────────────────────────────────────────────────
+function TermLabel({ label }: { label: string }) {
+  const [show, setShow] = useTooltipState(false);
+  const entry = FINANCIAL_TERMS.find(
+    (t) => t.term === label || (t.aliases ?? []).includes(label)
+  );
+  if (!entry) return <span>{label}</span>;
+  return (
+    <span className="relative inline-block">
+      <span
+        className="cursor-help underline decoration-dotted decoration-slate-300"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+      >
+        {label}
+      </span>
+      {show && (
+        <div className="absolute bottom-full left-0 z-50 mb-1.5 w-60 rounded-xl border border-slate-200 bg-white p-3 shadow-xl text-left">
+          <p className="text-[12px] font-bold text-slate-800">{entry.term}</p>
+          {entry.definition && <p className="mt-1 text-[11px] text-slate-600">{entry.definition}</p>}
+          {entry.meaning && <p className="mt-1 text-[11px] text-indigo-700">{entry.meaning}</p>}
+          {entry.formula && (
+            <p className="mt-1.5 rounded bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] text-amber-800">{entry.formula}</p>
+          )}
+        </div>
+      )}
+    </span>
+  );
 }
 
 const COLORS = {
@@ -128,9 +160,9 @@ function IncomeChart({ data }: { data: FinancialChartData }) {
           <Tooltip content={<CustomTooltip />} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           <ReferenceLine y={0} stroke="#94a3b8" />
-          <Bar dataKey={data.currentYear}    fill={COLORS.current}    radius={[3, 3, 0, 0]} />
-          <Bar dataKey={data.priorYear}      fill={COLORS.prior}      radius={[3, 3, 0, 0]} />
           <Bar dataKey={data.priorPriorYear} fill={COLORS.priorPrior} radius={[3, 3, 0, 0]} />
+          <Bar dataKey={data.priorYear}      fill={COLORS.prior}      radius={[3, 3, 0, 0]} />
+          <Bar dataKey={data.currentYear}    fill={COLORS.current}    radius={[3, 3, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -520,7 +552,7 @@ function KpiCard({
 }) {
   return (
     <div className="kpi-card rounded-2xl border border-slate-200/80 bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),_0_24px_40px_-20px_rgba(99,102,241,0.18)] hover:border-indigo-200">
-      <p className="text-[11px] text-slate-500">{label}</p>
+      <p className="text-[11px] text-slate-500"><TermLabel label={label} /></p>
       <p className="mt-1.5 text-[22px] font-bold tabular-nums text-slate-900">{value}</p>
       <div className="mt-1 flex items-center gap-2 text-[11px]">
         <YoyChip pct={yoy} />
@@ -711,7 +743,6 @@ function HealthSignal({ data }: { data: FinancialChartData }) {
       <h4 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
         <Activity className="h-4 w-4 text-indigo-500" />
         재무건전성 신호등
-        <span className="text-[10px] font-normal text-slate-400">교육 목적 참고용 — 투자 판단 아님</span>
       </h4>
       <div className={`grid gap-3 grid-cols-${cards.length} sm:grid-cols-${cards.length}`}>
         {cards.map((c) => (
@@ -785,7 +816,7 @@ function FinancialTable({ data }: { data: FinancialChartData }) {
                   const ratio = maxAbsCurrent > 0 ? Math.abs(m.current ?? 0) / maxAbsCurrent : 0;
                   return (
                     <tr key={m.label} className={`border-t border-slate-100 ${i % 2 === 1 ? "bg-slate-50/50" : ""} hover:bg-indigo-50/40`}>
-                      <td className="sticky left-0 bg-inherit px-3 py-2 font-medium text-slate-700">{m.label}</td>
+                      <td className="sticky left-0 bg-inherit px-3 py-2 font-medium text-slate-700"><TermLabel label={m.label} /></td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-400">{fmtVal(m.priorPrior, m.unit)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-slate-500">{fmtVal(m.prior, m.unit)}</td>
                       <td className={`px-3 py-2 text-right tabular-nums font-semibold ${isNeg ? "text-rose-600" : "text-slate-800"}`}>
@@ -859,10 +890,9 @@ export function FinancialCharts({ chartData }: Props) {
       {/* HR KPI */}
       <HrMetricsPanel data={chartData} />
 
-      <p className="text-[10px] text-slate-400">
-        * 교육용 시각화입니다. 수치는 공시 원문과 함께 확인하세요.
-        {chartData.unitNote && ` (${chartData.unitNote})`}
-      </p>
+      {chartData.unitNote && (
+        <p className="text-[10px] text-slate-400">({chartData.unitNote})</p>
+      )}
     </div>
   );
 }

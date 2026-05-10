@@ -1,7 +1,6 @@
 import { BarChart3, Globe2, History, Loader2, Search } from "lucide-react";
 import type { DisclosureSource } from "../types";
 import type { RecentItem } from "../lib/analysisStorage";
-import { TermOfTheDay } from "./TermOfTheDay";
 
 export function Sidebar({
   source,
@@ -39,10 +38,10 @@ export function Sidebar({
           </div>
           <div>
             <h1 className="text-[15px] font-bold tracking-tight text-slate-900">
-              공시로 회계 공부
+              공시런
             </h1>
             <p className="text-[11px] text-slate-500">
-              직장인 학습용 · DART / EDGAR
+              공시로 배우는 재무 · DART / EDGAR
             </p>
           </div>
         </div>
@@ -156,8 +155,6 @@ export function Sidebar({
           />
           데모 (API 없이 샘플만)
         </label>
-
-        <TermOfTheDay />
 
         <div className="mt-1 flex-1 overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/40 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">

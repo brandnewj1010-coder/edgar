@@ -11,7 +11,6 @@ import {
   HelpCircle,
   ArrowLeft,
   BookMarked,
-  Calculator,
   Layers,
   ChevronDown,
 } from "lucide-react";
@@ -439,17 +438,46 @@ function GlossarySection() {
 }
 
 // ─── L.6 공시 읽기 워크북 ─────────────────────────────────────────────────────
+const STEP_REFLECTIONS = [
+  {
+    question: "영업이익이 전년 대비 어떻게 변했나요? 매출과 비용 중 어느 쪽이 더 영향을 줬을까요?",
+    hint: "매출 변화와 비용 변화를 따로 살펴보세요.",
+    example: "매출이 소폭 늘었는데 영업이익이 줄었다면, 비용(인건비·원재료·감가상각)이 더 빠르게 늘어난 것입니다. 매출 성장보다 비용 효율이 핵심입니다.",
+  },
+  {
+    question: "영업이익과 영업활동현금흐름 중 어느 쪽이 더 크고, 그 차이는 왜 생길까요?",
+    hint: "감가상각비·운전자본 변동을 떠올려 보세요.",
+    example: "감가상각 같은 비현금 비용이 크면 영업CF > 영업이익입니다. 반대로 매출채권·재고가 급증했다면 현금이 묶여 영업CF < 영업이익이 됩니다. 두 수치의 차이 = '이익의 현금화율'입니다.",
+  },
+  {
+    question: "재고자산이나 매출채권이 크게 늘었다면, 현금흐름에 어떤 영향을 미칠까요?",
+    hint: "재고 증가 = 현금 묶임, 매출채권 증가 = 아직 못 받은 돈",
+    example: "재고가 늘면 운전자본 증가 → 영업CF 감소. 매출채권이 늘면 매출은 인식됐지만 현금은 미수 → 역시 영업CF 감소. 반대로 매입채무 증가는 지급 지연 → 영업CF에 긍정적입니다.",
+  },
+  {
+    question: "부채비율과 이자보상배율을 보고, 이 기업의 재무 안정성을 한 문장으로 평가해 보세요.",
+    hint: "부채비율 100% 이하 + 이자보상배율 3배 이상이면 일반적으로 안전권입니다.",
+    example: "부채비율이 낮고 이자보상배율이 3배 이상이면 '재무 안정성 양호'입니다. 반대로 이자보상배율이 1.5배 이하라면 이자 지급 여력이 부족해 위험 신호로 볼 수 있습니다.",
+  },
+  {
+    question: "수익성·성장성·안정성 키워드를 활용해 이 기업을 한 줄로 요약해 보세요.",
+    hint: "핵심 수치 하나씩 + 한계 또는 리스크로 마무리하세요.",
+    example: `"(기업)은 (연도) 기준 매출 (성장/감소)세, 영업이익률 (X)%로 (높은/낮은) 수익성을 유지하고 있으나, 부채비율 (Y)%로 (안정적/부담되는) 재무구조를 가지며, 핵심 리스크는 (OOO)입니다."`,
+  },
+];
+
 function WorkbookSection({ corpName }: { corpName: string }) {
   const [step, setStep] = useState(0);
-  const [quizChoice, setQuizChoice] = useState<number | null>(null);
+  const [showExample, setShowExample] = useState(false);
 
   const steps = [
     { title: `${corpName} 영업이익 흐름 파악`, sub: "손익계산서에서 연도별 영업이익 변화 찾기" },
     { title: "현금흐름 vs 이익 비교", sub: "왜 현금은 무사한가? 감가상각의 마법" },
     { title: "재고자산·비용 구조 발견", sub: "주석에서 핵심 변동 항목 찾기" },
     { title: "재무건전성 진단", sub: "부채비율·이자보상배율로 위기인가 확인" },
-    { title: "한 줄 결론 쓰기", sub: "AI 피드백으로 작문 다듬기" },
+    { title: "한 줄 결론 쓰기", sub: "수익성·성장성·안정성 세 키워드 활용" },
   ];
+  const reflection = STEP_REFLECTIONS[step];
 
   return (
     <section className="mb-6">
@@ -469,7 +497,7 @@ function WorkbookSection({ corpName }: { corpName: string }) {
             <ol className="space-y-3">
               {steps.map((s, i) => (
                 <li key={i} className={`flex cursor-pointer gap-3 rounded-lg p-1.5 transition-colors hover:bg-amber-100/50 ${i !== step ? "opacity-50" : ""}`}
-                  onClick={() => { setStep(i); setQuizChoice(null); }}>
+                  onClick={() => { setStep(i); setShowExample(false); }}>
                   <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold ${
                     i < step ? "bg-emerald-400 text-white" : i === step ? "bg-amber-600 text-white" : "border border-slate-300 bg-white text-slate-500"
                   }`}>{i < step ? "✓" : i + 1}</div>
@@ -488,150 +516,37 @@ function WorkbookSection({ corpName }: { corpName: string }) {
             <h3 className="mt-1 text-[18px] font-bold leading-snug text-slate-900">{steps[step].title}</h3>
             <p className="mt-3 text-[13px] leading-relaxed text-slate-700">
               {corpName}의 사업보고서에서 핵심 수치를 찾아봅니다.
-              좌측 리포트 탭의 차트와 비교하면서 수치의 의미를 해석해 보세요.
+              리포트 탭의 차트와 비교하면서 수치의 의미를 해석해 보세요.
             </p>
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="mb-2 text-[10px] font-semibold text-slate-500">📄 학습 포인트</div>
               <p className="text-[13px] leading-relaxed text-slate-800">
-                리포트 탭에서 <mark className="rounded bg-amber-200/60 px-1">{corpName}</mark>의 차트를 확인하고,
+                <mark className="rounded bg-amber-200/60 px-1">{corpName}</mark>의 차트를 확인하고,
                 영업이익·현금흐름·부채비율 세 지표가 어떻게 연결되는지 살펴보세요.
-                수치가 <mark className="rounded bg-rose-200/60 px-1">전년 대비 큰 변화</mark>를 보인다면 이유를 먼저 생각해 보세요.
+                <mark className="rounded bg-rose-200/60 px-1">전년 대비 큰 변화</mark>가 있다면 이유를 먼저 생각해 보세요.
               </p>
             </div>
             <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <div className="mb-2 text-[12px] font-semibold text-amber-900">🤔 한 번 생각해 봐요</div>
-              <p className="mb-3 text-[13px] text-amber-900"><strong>{corpName}</strong>에서 가장 중요한 재무 변화의 원인은?</p>
-              <div className="grid grid-cols-2 gap-2">
-                {["매출 성장 둔화", "비용 구조 변화", "외부 환경(환율·경기)", "일회성 이벤트"].map((opt, idx) => (
-                  <button key={idx} onClick={() => setQuizChoice(idx)}
-                    className={`rounded-lg border px-3 py-2 text-left text-[12px] transition-all ${
-                      quizChoice === null ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                        : idx === 2 ? "border-emerald-300 bg-emerald-50 font-semibold text-emerald-800"
-                        : quizChoice === idx ? "border-rose-300 bg-rose-50 text-rose-800"
-                        : "border-slate-200 bg-white text-slate-400"
-                    }`} disabled={quizChoice !== null}>{opt}</button>
-                ))}
-              </div>
-              <p className="mt-2 text-[10px] text-amber-700">힌트: 단일 원인보다 복합 원인을 먼저 의심해 보세요.</p>
+              <p className="mb-1 text-[13px] text-amber-900">{reflection.question}</p>
+              <p className="text-[11px] text-amber-700">힌트: {reflection.hint}</p>
+              <button
+                onClick={() => setShowExample((v) => !v)}
+                className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+              >
+                {showExample ? "▲ 예시 답안 접기" : "▼ 예시 답안 보기"}
+              </button>
+              {showExample && (
+                <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 p-3 text-[12px] leading-relaxed text-indigo-900">
+                  {reflection.example}
+                </div>
+              )}
             </div>
             <div className="mt-6 flex items-center justify-between">
-              <button onClick={() => { setStep((s) => Math.max(0, s - 1)); setQuizChoice(null); }} disabled={step === 0}
+              <button onClick={() => { setStep((s) => Math.max(0, s - 1)); setShowExample(false); }} disabled={step === 0}
                 className="rounded-lg px-4 py-2 text-[12px] text-slate-500 hover:bg-slate-100 disabled:opacity-40">← 이전</button>
-              <button onClick={() => { setStep((s) => Math.min(steps.length - 1, s + 1)); setQuizChoice(null); }} disabled={step === steps.length - 1}
+              <button onClick={() => { setStep((s) => Math.min(steps.length - 1, s + 1)); setShowExample(false); }} disabled={step === steps.length - 1}
                 className="rounded-lg bg-amber-600 px-5 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-40">다음 단계 →</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── L.7 재무 트레이너 ─────────────────────────────────────────────────────────
-function fmtNum(v: number): string {
-  if (Math.abs(v) >= 1_000_000_000_000) return `${(v / 1_000_000_000_000).toFixed(1)}조`;
-  if (Math.abs(v) >= 100_000_000) return `${Math.round(v / 100_000_000).toLocaleString()}억`;
-  if (Math.abs(v) >= 10_000) return `${Math.round(v / 10_000).toLocaleString()}만`;
-  return v.toLocaleString();
-}
-
-function TrainerSection({ chartData, corpName }: { chartData?: FinancialChartData | null; corpName: string }) {
-  const [input, setInput] = useState("");
-  const [result, setResult] = useState<"correct" | "wrong" | null>(null);
-
-  // Extract balance sheet from chartData if available
-  const getMetric = (labels: string[]) =>
-    chartData?.metrics.find((m) => labels.includes(m.label))?.current ?? null;
-
-  const totalAssets = getMetric(["총자산", "Total Assets"]);
-  const totalLiabilities = getMetric(["총부채", "Total Liabilities"]);
-  const totalEquity = getMetric(["자본총계", "Shareholders Equity", "자기자본"]);
-
-  const hasRealData = totalAssets !== null && totalLiabilities !== null && totalEquity !== null;
-  const answer = hasRealData && totalLiabilities !== null && totalEquity !== null && totalEquity !== 0
-    ? Math.round((Math.abs(totalLiabilities) / Math.abs(totalEquity)) * 100 * 10) / 10
-    : 25.6; // Samsung fallback
-
-  const unit = chartData?.metrics[0]?.unit ?? "백만원";
-
-  const rows = hasRealData ? [
-    { label: "자산 총계",  value: fmtNum(totalAssets!),      bold: true  },
-    { label: "부채 총계",  value: fmtNum(totalLiabilities!), bold: true  },
-    { label: "자본 총계",  value: fmtNum(totalEquity!),      bold: true  },
-  ] : [
-    { label: "유동자산",    value: "1,956,492", bold: false },
-    { label: "비유동자산",  value: "2,597,148", bold: false },
-    { label: "자산 총계",   value: "4,553,640", bold: true  },
-    { label: "유동부채",    value: "753,580",   bold: false },
-    { label: "비유동부채",  value: "173,820",   bold: false },
-    { label: "부채 총계",   value: "927,400",   bold: true  },
-    { label: "이익잉여금",  value: "3,447,815", bold: false },
-    { label: "자본 총계",   value: "3,626,240", bold: true  },
-  ];
-
-  const handleCheck = () => {
-    const val = parseFloat(input.replace(",", "."));
-    if (isNaN(val)) return;
-    setResult(Math.abs(val - answer) < 1 ? "correct" : "wrong");
-  };
-
-  return (
-    <section className="mb-6">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-amber-700">L.7</span>
-        <h2 className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-          <Calculator className="h-3.5 w-3.5 text-amber-600" />
-          재무 트레이너 — 손으로 비율 계산해 보기
-        </h2>
-        <span className="ml-auto text-[11px] text-slate-400">
-          {hasRealData ? `실데이터 · ${corpName} ${chartData?.currentYear}` : "삼성전자 2023 예시"}
-        </span>
-      </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <p className="mb-4 text-[12px] text-slate-600">
-          <strong>{hasRealData ? corpName : "삼성전자(005930)"}</strong>의 재무상태표입니다. <strong>부채비율</strong>을 계산해 보세요.
-          {!hasRealData && <span className="ml-1 text-slate-400">(검색하면 실제 데이터가 표시됩니다)</span>}
-        </p>
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 lg:col-span-2">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="text-[11px] font-semibold text-slate-700">
-                {hasRealData ? `${corpName} · ${chartData?.currentYear} 재무상태표` : "삼성전자 (005930) · 2023 연결 재무상태표"}
-              </div>
-              <span className="font-mono text-[10px] text-slate-500">{hasRealData ? `단위: ${unit}` : "단위: 억원"}</span>
-            </div>
-            <table className="w-full font-mono text-[12.5px]">
-              <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i} className={row.bold ? "border-t border-slate-300" : ""}>
-                    <td className={`py-1.5 ${row.bold ? "font-bold" : "text-slate-700"}`}>{row.label}</td>
-                    <td className={`py-1.5 text-right tabular-nums ${row.bold ? "font-bold" : ""}`}>{row.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="mt-3 text-[10px] text-slate-400">
-              {hasRealData ? `출처: DART 공시 (${chartData?.currentYear})` : "출처: DART 사업보고서 (2023.12.31) · 교육용 예시"}
-            </p>
-          </div>
-          <div className="flex flex-col rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-            <div className="mb-2 text-[11px] font-semibold text-amber-800">정답 입력</div>
-            <div className="mb-3 text-[13px] text-amber-900">부채비율 = ?</div>
-            <div className="flex items-center gap-2">
-              <input type="text" inputMode="decimal" placeholder="숫자만" value={input}
-                onChange={(e) => { setInput(e.target.value); setResult(null); }}
-                className="flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-right font-mono text-[18px] font-bold focus:outline-none focus:ring-4 focus:ring-amber-500/15" />
-              <span className="text-[18px] font-bold text-amber-800">%</span>
-            </div>
-            <button onClick={handleCheck} className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-[12px] font-semibold text-white hover:bg-amber-700">채점하기</button>
-            {result === "correct" && (
-              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-[12px] font-semibold text-emerald-700">✓ 정답! 부채비율 약 {answer}%</div>
-            )}
-            {result === "wrong" && (
-              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-2 text-[12px] text-rose-700">아쉬워요! 힌트를 참고해 보세요.</div>
-            )}
-            <div className="mt-4 border-t border-amber-200 pt-3 text-[11px] leading-relaxed text-amber-800/90">
-              힌트: <code className="font-mono">부채총계 ÷ 자본총계 × 100</code>
             </div>
           </div>
         </div>
@@ -660,16 +575,6 @@ export function StudyPage({ pendingQuiz, onClearPending, lastQuery, lastChartDat
     setLoading(true);
     loadQuizSessions().then((s) => { setSessions(s); setLoading(false); });
   }, []);
-
-  useEffect(() => {
-    if (!pendingQuiz || pendingQuiz.questions.length === 0) return;
-    const session = createQuizSession(pendingQuiz.source, pendingQuiz.query, pendingQuiz.questions);
-    saveQuizSession(session).then(() => {
-      setSessions((prev) => [session, ...prev]);
-      setActiveSession(session);
-      onClearPending?.();
-    });
-  }, [pendingQuiz, onClearPending]);
 
   const handleComplete = useCallback(async (updated: QuizSession) => {
     await saveQuizSession(updated);
@@ -732,7 +637,6 @@ export function StudyPage({ pendingQuiz, onClearPending, lastQuery, lastChartDat
 
         <GlossarySection />
         <WorkbookSection corpName={corpName} />
-        <TrainerSection chartData={lastChartData} corpName={corpName} />
 
         {/* 스터디 아카이브 */}
         {loading ? (

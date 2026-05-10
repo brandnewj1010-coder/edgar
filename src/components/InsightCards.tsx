@@ -1,4 +1,4 @@
-import { AlertTriangle, TrendingDown, TrendingUp, Minus, Lightbulb, GitBranch, Sparkles } from "lucide-react";
+import { AlertTriangle, TrendingDown, TrendingUp, Minus, Sparkles } from "lucide-react";
 import type { InsightCards as InsightCardsType, InsightSeverity } from "../types";
 
 interface Props {
@@ -35,7 +35,7 @@ export function InsightCards({ cards }: Props) {
             <AlertTriangle className="h-4 w-4 text-amber-500" />
             주목할 점
           </h3>
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             {cards.watchOuts.map((w, i) => {
               const s = SEVERITY_STYLE[w.severity ?? "low"];
               return (
@@ -65,7 +65,7 @@ export function InsightCards({ cards }: Props) {
             <Sparkles className="h-4 w-4 text-indigo-500" />
             이상치 자동 코멘트
           </h3>
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             {cards.anomalies.map((a, i) => (
               <div key={i} className="flex items-start gap-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3">
                 <DirectionIcon d={a.direction} />
@@ -74,41 +74,6 @@ export function InsightCards({ cards }: Props) {
                   <p className="mt-1 text-[13px] leading-relaxed text-slate-600">{a.note}</p>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 시나리오 */}
-      {cards.scenarios.length > 0 && (
-        <section>
-          <h3 className="mb-2.5 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-            <GitBranch className="h-4 w-4 text-violet-500" />
-            시나리오 분석
-          </h3>
-          <div className="space-y-2">
-            {cards.scenarios.map((sc, i) => (
-              <div key={i} className="rounded-xl border border-violet-100 bg-violet-50/50 px-4 py-3">
-                <p className="text-[12px] font-semibold text-violet-700">IF · {sc.if}</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-slate-600">→ {sc.then}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 강점 */}
-      {cards.strengths.length > 0 && (
-        <section>
-          <h3 className="mb-2.5 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-            <Lightbulb className="h-4 w-4 text-emerald-500" />
-            강점 요약
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {cards.strengths.map((s, i) => (
-              <span key={i} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[13px] text-emerald-800">
-                ✓ {s}
-              </span>
             ))}
           </div>
         </section>
