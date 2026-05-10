@@ -407,6 +407,31 @@ export default function App() {
                     <MarkdownReport markdown={result.reportMarkdown} />
                   </ReportDocument>
                 </div>
+
+                {/* 출처 인용 카드 */}
+                {result.sources && result.sources.length > 0 && (
+                  <div className="mt-6">
+                    <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-400"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                      출처 · 참고 자료
+                    </h3>
+                    <div className="space-y-2">
+                      {result.sources.map((src, i) => (
+                        <a
+                          key={i}
+                          href={src.uri}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm hover:border-indigo-200 hover:bg-indigo-50/40 transition-colors"
+                        >
+                          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">{i + 1}</span>
+                          <span className="min-w-0 text-slate-700 leading-snug">{src.title}</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-0.5 shrink-0 text-slate-300"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
