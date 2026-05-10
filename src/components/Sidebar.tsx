@@ -8,8 +8,6 @@ export function Sidebar({
   onSource,
   query,
   onQuery,
-  compareWith,
-  onCompareWith,
   onSubmit,
   loading,
   recent,
@@ -22,8 +20,6 @@ export function Sidebar({
   onSource: (s: DisclosureSource) => void;
   query: string;
   onQuery: (q: string) => void;
-  compareWith: string;
-  onCompareWith: (v: string) => void;
   onSubmit: () => void;
   loading: boolean;
   recent: RecentItem[];
@@ -86,11 +82,7 @@ export function Sidebar({
               <span className="font-medium text-slate-600">
                 연결·별도 재무제표, 임원·직원 공시
               </span>
-              를 붙입니다. 서버 환경 변수{" "}
-              <code className="rounded bg-slate-100 px-1 font-mono text-[10px]">
-                DART_API_KEY
-              </code>{" "}
-              가 있을 때 동작해요 (opendart.fss.or.kr 무료 발급).
+              를 붙입니다.
             </p>
           ) : null}
         </div>
@@ -124,21 +116,11 @@ export function Sidebar({
               )}
             </button>
           </div>
-        </div>
-
-        {/* 비교 기업 */}
-        <div>
-          <label className="mb-1.5 block text-xs font-medium text-slate-600">
-            비교 기업 <span className="text-slate-400">(선택)</span>
-          </label>
-          <input
-            value={compareWith}
-            onChange={(e) => onCompareWith(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && onSubmit()}
-            placeholder={source === "dart" ? "예: SK하이닉스, 000660" : "예: AMD"}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-sm outline-none transition focus:border-amber-400 focus:bg-white focus:ring-2 focus:ring-amber-500/15 placeholder:text-slate-400"
-          />
-          <p className="mt-1 text-[10px] text-slate-400">입력하면 두 기업 비교 차트가 표시됩니다</p>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
+            {source === "dart"
+              ? "한글 회사명(삼성전자·에스케이하이닉스), 영문(NAVER), 종목코드(005930) 모두 입력 가능합니다."
+              : "티커(AAPL)나 회사명(Apple) 모두 입력 가능합니다."}
+          </p>
         </div>
 
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
