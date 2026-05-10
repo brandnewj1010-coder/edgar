@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>공시런 사용자 매뉴얼</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      line-height: 1.65;
+      word-break: keep-all;
+    }
+
+    /* ── 히어로 ── */
+    .hero {
+      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      color: #fff;
+      padding: 72px 24px 60px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 65% 35%, rgba(255,255,255,.07) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(255,255,255,.14);
+      border: 1px solid rgba(255,255,255,.24);
+      border-radius: 999px;
+      padding: 5px 14px;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      font-size: clamp(26px, 4.5vw, 44px);
+      font-weight: 800; letter-spacing: -.025em;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      font-size: 15.5px; opacity: .82;
+      max-width: 480px; margin: 0 auto 28px;
+      line-height: 1.7;
+    }
+    .hero-url {
+      display: inline-block;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 10px;
+      padding: 8px 20px;
+      font-size: 13px; font-family: monospace;
+      color: #c7d2fe; text-decoration: none;
+      transition: background .2s;
+    }
+    .hero-url:hover { background: rgba(255,255,255,.22); color: #fff; }
+
+    /* ── 목차 ── */
+    .toc-wrap { max-width: 860px; margin: 40px auto; padding: 0 24px; }
+    .toc {
+      background: #fff; border: 1px solid #e2e8f0;
+      border-radius: 16px; padding: 24px 28px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.04);
+    }
+    .toc-title {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase;
+      color: #6366f1; margin-bottom: 14px;
+    }
+    .toc ol {
+      padding-left: 20px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 7px 32px;
+    }
+    @media (max-width: 520px) { .toc ol { grid-template-columns: 1fr; } }
+    .toc a {
+      color: #475569; text-decoration: none;
+      font-size: 13.5px; font-weight: 500;
+      transition: color .15s;
+    }
+    .toc a:hover { color: #6366f1; }
+
+    /* ── 섹션 ── */
+    .section { max-width: 860px; margin: 0 auto 60px; padding: 0 24px; }
+    .section-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 28px; padding-bottom: 16px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .section-num {
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, #6366f1, #7c3aed);
+      color: #fff; font-size: 15px; font-weight: 700; flex-shrink: 0;
+    }
+    .section-header h2 {
+      font-size: 21px; font-weight: 800;
+      letter-spacing: -.02em; color: #0f172a;
+    }
+    .section-header small { font-size: 13px; color: #94a3b8; margin-left: 4px; }
+    hr.divider {
+      max-width: 860px; margin: 0 auto 44px;
+      border: none; border-top: 1px solid #e2e8f0;
+    }
+
+    /* ── 카드 ── */
+    .card-grid-2 {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 14px; margin-bottom: 24px;
+    }
+    .card-grid-3 {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px; margin-bottom: 24px;
+    }
+    @media (max-width: 600px) {
+      .card-grid-2, .card-grid-3 { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: #fff; border: 1px solid #e2e8f0;
+      border-radius: 14px; padding: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.04);
+      transition: transform .2s, box-shadow .2s, border-color .2s;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(99,102,241,.10);
+      border-color: #c7d2fe;
+    }
+    .card-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; margin-bottom: 12px;
+    }
+    .card h3 { font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
+    .card p  { font-size: 12.5px; color: #64748b; line-height: 1.65; }
+
+    /* ── 스크린샷 + 크롭 프레임 ── */
+    .screenshot-wrap {
+      background: #fff; border: 1px solid #e2e8f0;
+      border-radius: 16px; overflow: hidden;
+      box-shadow: 0 4px 20px rgba(15,23,42,.06);
+      margin-bottom: 24px;
+    }
+    .screenshot-bar {
+      background: #f1f5f9; border-bottom: 1px solid #e2e8f0;
+      padding: 8px 14px; font-size: 11px; font-weight: 600;
+      color: #64748b; letter-spacing: .04em;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .dot-r { background: #f87171; }
+    .dot-y { background: #fbbf24; }
+    .dot-g { background: #4ade80; }
+
+    /* 전체 이미지 */
+    .screenshot-wrap img.full { width: 100%; display: block; }
+
+    /* 크롭 창 — position:absolute + translateY 방식 */
+    .crop-win {
+      overflow: hidden;
+      position: relative;
+      height: var(--h, 220px);
+      background: #f8fafc;
+    }
+    .crop-win img {
+      width: var(--w, 100%);
+      position: absolute;
+      top: 0;
+      left: var(--l, 0%);
+      transform: translateY(var(--t, 0%));
+      transform-origin: top center;
+      display: block;
+    }
+
+    .screenshot-caption {
+      padding: 10px 16px; font-size: 12px;
+      color: #64748b; background: #fafafa;
+      border-top: 1px solid #f1f5f9;
+      text-align: center; font-style: italic;
+    }
+    .crop-label {
+      font-size: 12px; font-weight: 600;
+      color: #64748b; margin-bottom: 8px;
+    }
+
+    /* ── 단계 ── */
+    .steps { display: flex; flex-direction: column; margin-bottom: 24px; }
+    .step {
+      display: flex; gap: 16px; align-items: flex-start;
+      padding: 16px 12px; border-radius: 10px;
+      border-bottom: 1px solid #f1f5f9;
+      transition: background .15s;
+    }
+    .step:last-child { border-bottom: none; }
+    .step:hover { background: #fafbff; }
+    .step-num {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: #ede9fe; color: #7c3aed;
+      font-weight: 700; font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 2px;
+      transition: background .2s, color .2s;
+    }
+    .step:hover .step-num { background: #7c3aed; color: #fff; }
+    .step-content h3 { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 3px; }
+    .step-content p  { font-size: 13px; color: #475569; }
+    .step-content code {
+      background: #f1f5f9; border-radius: 4px;
+      padding: 1px 6px; font-size: 11.5px;
+      color: #4f46e5; font-family: monospace;
+    }
+
+    /* ── 배지 ── */
+    .badge {
+      display: inline-block; border-radius: 6px;
+      padding: 2px 9px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    }
+    .badge-dart  { background: #ede9fe; color: #6d28d9; }
+    .badge-edgar { background: #dbeafe; color: #1d4ed8; }
+
+    /* ── 팁 ── */
+    .tip {
+      border-radius: 12px; padding: 14px 18px;
+      margin-bottom: 20px; font-size: 13px;
+      line-height: 1.65; display: flex; gap: 12px;
+    }
+    .tip-icon { font-size: 17px; flex-shrink: 0; margin-top: 1px; }
+    .tip-green  { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .tip-yellow { background: #fffbeb; border: 1px solid #fde68a; color: #78350f; }
+    .tip-blue   { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+
+    /* ── 테이블 ── */
+    .feat-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 13px; margin-bottom: 24px;
+      background: #fff; border-radius: 12px;
+      overflow: hidden; border: 1px solid #e2e8f0;
+    }
+    .feat-table th {
+      background: #f8fafc; padding: 10px 14px;
+      text-align: left; font-size: 11px; font-weight: 700;
+      color: #64748b; text-transform: uppercase;
+      letter-spacing: .05em; border-bottom: 1px solid #e2e8f0;
+    }
+    .feat-table td {
+      padding: 11px 14px; border-bottom: 1px solid #f1f5f9;
+      color: #374151; vertical-align: top; transition: background .12s;
+    }
+    .feat-table tr:hover td { background: #fafbff; }
+    .feat-table tr:last-child td { border-bottom: none; }
+    .feat-table td:first-child { font-weight: 600; color: #1e293b; white-space: nowrap; }
+
+    /* ── 신호등 ── */
+    .signal-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .signal-chip {
+      border-radius: 10px; padding: 10px 16px;
+      font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+      transition: transform .2s, box-shadow .2s;
+    }
+    .signal-chip:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.09); }
+    .signal-a { background: #dcfce7; color: #166534; }
+    .signal-b { background: #fef9c3; color: #713f12; }
+    .signal-c { background: #fee2e2; color: #991b1b; }
+    .signal-grade {
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800;
+    }
+    .signal-a .signal-grade { background: #16a34a; color: #fff; }
+    .signal-b .signal-grade { background: #ca8a04; color: #fff; }
+    .signal-c .signal-grade { background: #dc2626; color: #fff; }
+
+    /* ── 2열 ── */
+    .two-col {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 14px; margin-bottom: 20px;
+    }
+    @media (max-width: 560px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── 맨 위로 ── */
+    #top-btn {
+      position: fixed; bottom: 24px; right: 24px;
+      width: 42px; height: 42px;
+      background: linear-gradient(135deg, #6366f1, #7c3aed);
+      color: #fff; border: none; border-radius: 50%;
+      cursor: pointer; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 14px rgba(99,102,241,.35);
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s, transform .2s;
+      z-index: 100;
+    }
+    #top-btn.show { opacity: 1; pointer-events: auto; }
+    #top-btn:hover { transform: translateY(-3px); }
+
+    /* ── 푸터 ── */
+    footer {
+      text-align: center; padding: 40px 24px;
+      font-size: 12px; color: #94a3b8;
+      border-top: 1px solid #e2e8f0;
+    }
+    footer a { color: #6366f1; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<!-- 히어로 -->
+<header class="hero">
+  <div class="hero-badge">📊 사용자 매뉴얼 v1.0</div>
+  <h1>공시런 사용 가이드</h1>
+  <p>국내외 기업 공시를 AI가 자동 수집·분석해<br>재무 리포트로 정리해주는 도구입니다.</p>
+  <a class="hero-url" href="https://edgar-roan.vercel.app" target="_blank">edgar-roan.vercel.app ↗</a>
+</header>
+
+<!-- 목차 -->
+<div class="toc-wrap">
+  <div class="toc">
+    <div class="toc-title">목차</div>
+    <ol>
+      <li><a href="#intro">서비스 소개</a></li>
+      <li><a href="#search">검색 방법 (DART / EDGAR)</a></li>
+      <li><a href="#report">분석 리포트 구성</a></li>
+      <li><a href="#charts">재무 차트 이해하기</a></li>
+      <li><a href="#sankey">자금 흐름 Sankey</a></li>
+      <li><a href="#insight">주목할 점 (InsightCards)</a></li>
+      <li><a href="#study">학습 모드</a></li>
+      <li><a href="#history">저장 & 인쇄</a></li>
+    </ol>
+  </div>
+</div>
+
+<!-- 1. 서비스 소개 -->
+<section class="section" id="intro">
+  <div class="section-header">
+    <div class="section-num">1</div>
+    <h2>서비스 소개 <small>공시런이란?</small></h2>
+  </div>
+
+  <div class="card-grid-2">
+    <div class="card">
+      <div class="card-icon" style="background:#ede9fe;">📋</div>
+      <h3>공시 데이터 자동 수집</h3>
+      <p>금감원 DART(국내)와 SEC EDGAR(미국) API에서 재무 공시를 실시간으로 가져옵니다.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:#dbeafe;">🤖</div>
+      <h3>AI 해설 & 인사이트</h3>
+      <p>OpenAI GPT가 핵심 수치를 요약하고 재무 위험·강점·거시 시나리오를 자동으로 분석합니다.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:#d1fae5;">📈</div>
+      <h3>인터랙티브 차트</h3>
+      <p>3년치 매출·이익·부채 추이, 이익률, 자금 흐름 Sankey를 인터랙티브 차트로 제공합니다.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:#fef3c7;">🎓</div>
+      <h3>학습 모드</h3>
+      <p>실제 공시 데이터로 출제되는 퀴즈와 101개 재무 용어 도감을 함께 제공합니다.</p>
+    </div>
+  </div>
+
+  <div class="tip tip-blue">
+    <span class="tip-icon">ℹ️</span>
+    <div>
+      <strong>지원 데이터 소스</strong><br>
+      <span class="badge badge-dart">DART</span>&nbsp;KRX 상장 전체 기업 — 연결/별도 재무제표, 사업보고서 기준<br>
+      <span class="badge badge-edgar" style="margin-top:5px; display:inline-block;">EDGAR</span>&nbsp;미국 SEC 등록 기업 — 티커로 검색, 연간 10-K 기준
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 2. 검색 방법 -->
+<section class="section" id="search">
+  <div class="section-header">
+    <div class="section-num">2</div>
+    <h2>검색 방법 <small>DART / EDGAR</small></h2>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <span class="badge badge-dart" style="display:inline-block; margin-bottom:10px;">DART · 국내</span>
+      <ul style="font-size:13px; color:#475569; padding-left:18px; line-height:2.2;">
+        <li>한글 기업명 &mdash; <code style="background:#f1f5f9; padding:1px 6px; border-radius:4px; font-size:11.5px; color:#4f46e5; font-family:monospace;">삼성전자</code></li>
+        <li>영문 기업명 &mdash; <code style="background:#f1f5f9; padding:1px 6px; border-radius:4px; font-size:11.5px; color:#4f46e5; font-family:monospace;">NAVER</code></li>
+        <li>KRX 종목코드 &mdash; <code style="background:#f1f5f9; padding:1px 6px; border-radius:4px; font-size:11.5px; color:#4f46e5; font-family:monospace;">005930</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="badge badge-edgar" style="display:inline-block; margin-bottom:10px;">EDGAR · 미국</span>
+      <ul style="font-size:13px; color:#475569; padding-left:18px; line-height:2.2;">
+        <li>티커만 지원 &mdash; <code style="background:#f1f5f9; padding:1px 6px; border-radius:4px; font-size:11.5px; color:#4f46e5; font-family:monospace;">AAPL</code>, <code style="background:#f1f5f9; padding:1px 6px; border-radius:4px; font-size:11.5px; color:#4f46e5; font-family:monospace;">NVDA</code></li>
+        <li>회사명 검색 불가</li>
+        <li>수치 단위: B(십억 달러)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <h3>소스 선택</h3>
+        <p>왼쪽 사이드바 상단에서 <code>DART</code>(국내) 또는 <code>EDGAR</code>(미국)를 선택합니다.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <h3>기업 입력</h3>
+        <p>검색창에 기업명 또는 종목코드를 입력합니다. 퀵픽 버튼으로 자주 찾는 기업을 바로 조회할 수 있습니다.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <h3>검색 실행</h3>
+        <p>돋보기 버튼 또는 <code>Enter</code> 키. AI 분석 포함 보통 10–20초 소요됩니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 전체 화면 스크린샷 1개 -->
+  <div class="screenshot-wrap">
+    <div class="screenshot-bar">
+      <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+      &nbsp;전체 화면 &mdash; 삼성전자 DART 분석 리포트
+    </div>
+    <img class="full" src="edgar-roan.vercel.app_.png" alt="삼성전자 DART 분석 전체 화면" />
+    <div class="screenshot-caption">사이드바(좌)에서 소스와 기업을 선택하면 우측에 분석 리포트 전체가 펼쳐집니다.</div>
+  </div>
+
+  <div class="tip tip-yellow">
+    <span class="tip-icon">⚠️</span>
+    <div>
+      <strong>일일 분석 한도</strong> — 하루 50건의 AI 분석이 제공됩니다.
+      같은 기업 재검색은 <strong>6시간 캐시</strong>를 사용하므로 한도에 포함되지 않습니다.
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 3. 분석 리포트 -->
+<section class="section" id="report">
+  <div class="section-header">
+    <div class="section-num">3</div>
+    <h2>분석 리포트 구성</h2>
+  </div>
+
+  <!-- 핵심 지표 카드 크롭 — NVDA, 상단 메트릭 4개 카드 영역 -->
+  <p class="crop-label">▸ 핵심 지표 카드</p>
+  <div class="screenshot-wrap">
+    <div class="screenshot-bar">
+      <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+      &nbsp;EDGAR — NVDA · 핵심 지표 카드
+    </div>
+    <img class="full" src="crop_kpi_nvda.png" alt="핵심 지표" />
+    <div class="screenshot-caption">매출액·영업이익·영업이익률·당기순이익, 전년 대비 증감(▲▼)을 한눈에 확인합니다.</div>
+  </div>
+
+  <table class="feat-table">
+    <thead>
+      <tr><th>구성 요소</th><th>내용</th><th>출처</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>핵심 지표 카드</td><td>매출액 · 영업이익 · 영업이익률 · 당기순이익 (YoY 포함)</td><td>공시 API</td></tr>
+      <tr><td>순익 추이</td><td>최근 3년 매출 / 영업이익 / 당기순이익 막대 차트</td><td>공시 API</td></tr>
+      <tr><td>이익률 추이</td><td>영업이익률 · 순이익률 꺾은선 차트</td><td>공시 API</td></tr>
+      <tr><td>재무상태표 추이</td><td>총자산 · 총부채 · 자기자본 3년 추이</td><td>공시 API</td></tr>
+      <tr><td>현금흐름 추이</td><td>영업 · 투자 · 재무 현금흐름 비교 (EDGAR)</td><td>공시 API</td></tr>
+      <tr><td>재무건전성 신호등</td><td>영업이익률 / 부채비율 / 매출 YoY를 A–C 등급으로 요약</td><td>AI 계산</td></tr>
+      <tr><td>재무지표 전체 표</td><td>손익·재무상태·현금흐름 전 항목을 연도별로 정리</td><td>공시 API</td></tr>
+      <tr><td>자금 흐름 Sankey</td><td>매출 → 비용 → 이익 흐름 리본 다이어그램</td><td>공시 API</td></tr>
+      <tr><td>주목할 점</td><td>재무 강점 · 위험 · 이상 지표 · 거시 시나리오 (AI)</td><td>AI 분석</td></tr>
+    </tbody>
+  </table>
+
+  <!-- 재무건전성 신호등 크롭 — 삼성전자, 신호등 배지 3개 영역 -->
+  <p class="crop-label">▸ 재무건전성 신호등</p>
+  <div class="screenshot-wrap">
+    <div class="screenshot-bar">
+      <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+      &nbsp;DART — 삼성전자 · 재무건전성 신호등
+    </div>
+    <img class="full" src="crop_signal_samsung.png" alt="재무건전성 신호등" />
+    <div class="screenshot-caption">영업이익률·부채비율·매출 성장을 A / B / C 3단계로 시각화합니다.</div>
+  </div>
+
+  <div class="signal-row">
+    <div class="signal-chip signal-a"><div class="signal-grade">A</div><div>우수 &mdash; 업종 평균 상회</div></div>
+    <div class="signal-chip signal-b"><div class="signal-grade">B</div><div>보통 &mdash; 추세 모니터링 필요</div></div>
+    <div class="signal-chip signal-c"><div class="signal-grade">C</div><div>위험 &mdash; 심층 분석 권장</div></div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 4. 재무 차트 -->
+<section class="section" id="charts">
+  <div class="section-header">
+    <div class="section-num">4</div>
+    <h2>재무 차트 이해하기</h2>
+  </div>
+
+  <div class="tip tip-green">
+    <span class="tip-icon">💡</span>
+    <div>차트 위에 마우스를 올리면 툴팁으로 정확한 수치를 확인할 수 있습니다. 범례 항목을 클릭하면 특정 시리즈를 숨기거나 다시 표시할 수 있습니다.</div>
+  </div>
+
+  <div class="card-grid-2">
+    <div class="card">
+      <div class="card-icon" style="background:#ede9fe;">📊</div>
+      <h3>순익 추이 (막대)</h3>
+      <p>매출액·영업이익·당기순이익을 3년 비교합니다. 막대가 우상향이면 성장 중인 기업입니다.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:#dbeafe;">📉</div>
+      <h3>이익률 추이 (꺾은선)</h3>
+      <p>영업이익률 지속 하락은 비용 구조 악화 신호입니다. 순이익률과 괴리가 크면 이자비용·세금을 확인하세요.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:#d1fae5;">🏦</div>
+      <h3>재무상태표 추이</h3>
+      <p>총자산 대비 부채 비율 변화를 확인합니다. 부채가 자산보다 빠르게 늘면 레버리지 위험 신호입니다.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:#fef3c7;">💰</div>
+      <h3>현금흐름 추이 (EDGAR)</h3>
+      <p>영업·투자·재무 현금흐름을 비교합니다. 영업CF가 흑자면 자생 가능한 사업 구조입니다.</p>
+    </div>
+  </div>
+
+  <!-- 순익·이익률 차트 크롭 — WBTN, 두 차트가 나란히 배치된 영역 -->
+  <p class="crop-label">▸ 순익 추이 / 이익률 추이 차트 (WBTN — 상장 초기 적자 기업 예시)</p>
+  <div class="screenshot-wrap">
+    <div class="screenshot-bar">
+      <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+      &nbsp;EDGAR — WBTN · 순익 추이 & 이익률 추이
+    </div>
+    <img class="full" src="crop_charts_wbtn.png" alt="WBTN 차트" />
+    <div class="screenshot-caption">상장 초기 기업은 매출이 있어도 영업이익이 음수인 경우가 많습니다. 적자 폭이 줄어드는 추세인지 확인하세요.</div>
+  </div>
+
+  <!-- 현금흐름 크롭 — WBTN -->
+  <p class="crop-label">▸ 현금흐름 추이 차트 (EDGAR 전용)</p>
+  <div class="screenshot-wrap">
+    <div class="screenshot-bar">
+      <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+      &nbsp;EDGAR — WBTN · 현금흐름 추이
+    </div>
+    <img class="full" src="crop_cashflow_wbtn.png" alt="WBTN 현금흐름" />
+    <div class="screenshot-caption">영업·투자·재무 현금흐름을 색별로 구분합니다. 투자CF 유출이 크고 영업CF가 증가하면 성장 투자 중인 기업입니다.</div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 5. Sankey -->
+<section class="section" id="sankey">
+  <div class="section-header">
+    <div class="section-num">5</div>
+    <h2>자금 흐름 Sankey <small>매출 → 비용 → 이익</small></h2>
+  </div>
+
+  <p style="font-size:14px; color:#475569; margin-bottom:20px;">
+    Sankey 다이어그램은 매출이 어떤 비용으로 빠져나가고 이익이 얼마나 남는지를 <strong>리본의 두께</strong>로 직관적으로 보여줍니다.
+  </p>
+
+  <!-- Sankey 크롭 — NVDA, 페이지 최하단 Sankey 다이어그램 -->
+  <div class="screenshot-wrap">
+    <div class="screenshot-bar">
+      <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+      &nbsp;EDGAR — NVDA · 자금 흐름 Sankey
+    </div>
+    <img class="full" src="crop_sankey_nvda.png" alt="NVDA Sankey" />
+    <div class="screenshot-caption">NVDA: 매출에서 매출원가·판관비를 제외하면 영업이익 리본이 두꺼워 높은 수익성을 한눈에 확인할 수 있습니다.</div>
+  </div>
+
+  <div class="card-grid-3">
+    <div class="card">
+      <h3 style="color:#6d28d9; margin-bottom:6px;">← 왼쪽</h3>
+      <p>매출액 — 모든 자금의 출발점입니다.</p>
+    </div>
+    <div class="card">
+      <h3 style="color:#1d4ed8; margin-bottom:6px;">↓ 가운데</h3>
+      <p>매출원가·판관비·이자비용·세금이 리본으로 분기됩니다.</p>
+    </div>
+    <div class="card">
+      <h3 style="color:#065f46; margin-bottom:6px;">→ 오른쪽</h3>
+      <p>영업이익·순이익 — 두꺼울수록 수익성이 높습니다.</p>
+    </div>
+  </div>
+
+  <div class="tip tip-blue">
+    <span class="tip-icon">📌</span>
+    <div>Sankey는 <strong>가장 최근 연도</strong> 기준으로 표시됩니다. 매출원가 리본이 70% 이상이면 원가 절감이 핵심 과제임을 시사합니다.</div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 6. InsightCards -->
+<section class="section" id="insight">
+  <div class="section-header">
+    <div class="section-num">6</div>
+    <h2>주목할 점 <small>AI InsightCards</small></h2>
+  </div>
+
+  <!-- InsightCards 크롭 — 새 WBTN, 페이지 최상단 InsightCards -->
+  <div class="screenshot-wrap">
+    <div class="screenshot-bar">
+      <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+      &nbsp;EDGAR — WBTN · 주목할 점 (InsightCards)
+    </div>
+    <img class="full" src="crop_insight_wbtn.png" alt="InsightCards" />
+    <div class="screenshot-caption">검색 직후 리포트 최상단에 표시됩니다. 주목할 점(좌)과 총괄 점검 카드(우)로 구성됩니다.</div>
+  </div>
+
+  <table class="feat-table">
+    <thead>
+      <tr><th>카드 종류</th><th>설명</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>💪 재무 강점</td><td>공시 수치로 확인되는 경쟁우위 (높은 영업이익률, 무차입 경영 등)</td></tr>
+      <tr><td>⚠️ 주의할 점</td><td>순수 재무 위험 요소 — 레버리지 · 현금흐름 · 수익성 위험</td></tr>
+      <tr><td>🔍 이상 지표</td><td>전년 대비 급변한 지표와 방향성 (↑↓)</td></tr>
+      <tr><td>🌐 거시 시나리오</td><td>환율·금리·원자재 등 외부 변수가 실적에 미치는 영향</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip tip-yellow">
+    <span class="tip-icon">⚠️</span>
+    <div>InsightCards는 <strong>투자 조언이 아닙니다.</strong> AI가 공시 수치만을 근거로 생성한 참고 정보이며, 투자 결정 전 반드시 원본 공시 전문을 확인하세요.</div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 7. 학습 모드 -->
+<section class="section" id="study">
+  <div class="section-header">
+    <div class="section-num">7</div>
+    <h2>학습 모드 <small>퀴즈 · 용어 도감 · 학습소</small></h2>
+  </div>
+
+  <p style="font-size:14px; color:#475569; margin-bottom:20px;">
+    우측 상단 <strong>스터디</strong> 버튼을 누르면 학습 모드로 전환됩니다.
+  </p>
+
+  <!-- 퀴즈 크롭 — 학습모드 상단, 퀴즈 박스 전체 -->
+  <p class="crop-label">▸ 오늘의 퀴즈</p>
+  <div class="screenshot-wrap">
+    <div class="screenshot-bar">
+      <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+      &nbsp;학습 모드 — 삼성전자 분석 퀴즈
+    </div>
+    <img class="full" src="crop_quiz_study.png" alt="퀴즈" />
+    <div class="screenshot-caption">검색한 기업의 실제 공시 수치를 바탕으로 AI가 문제를 출제합니다.</div>
+  </div>
+
+  <!-- 용어도감 크롭 — 학습모드 중간, 용어 카드 영역 -->
+  <p class="crop-label">▸ 재무 용어 도감 (101개)</p>
+  <div class="screenshot-wrap">
+    <div class="screenshot-bar">
+      <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
+      &nbsp;학습 모드 — 재무 용어 도감
+    </div>
+    <img class="full" src="crop_terms_study.png" alt="용어 도감" />
+    <div class="screenshot-caption">Net Loss · Gross Profit · Operating Margin 등 카테고리별 필터로 원하는 용어를 빠르게 찾을 수 있습니다.</div>
+  </div>
+
+  <div class="card-grid-2">
+    <div class="card">
+      <div class="card-icon" style="background:#fef3c7;">🧩</div>
+      <h3>오늘의 퀴즈</h3>
+      <p>공시 확인 → 탐험 → 베팅 → 인사이트 확인, 4단계로 진행됩니다.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:#dbeafe;">📖</div>
+      <h3>용어 도감</h3>
+      <p>101개 재무 용어를 카드 형태로 학습합니다. 카테고리별 필터를 지원합니다.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:#d1fae5;">🏫</div>
+      <h3>공시 읽기 학습소</h3>
+      <p>실제 공시를 주제별로 분석하는 가이드 카드를 제공합니다.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon" style="background:#ede9fe;">📚</div>
+      <h3>스터디 아카이브</h3>
+      <p>이전 학습 내용을 다시 볼 수 있는 아카이브입니다. 브라우저 로컬에 자동 저장됩니다.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- 8. 저장 & 인쇄 -->
+<section class="section" id="history">
+  <div class="section-header">
+    <div class="section-num">8</div>
+    <h2>저장 & 인쇄</h2>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <h3 style="margin-bottom:8px;">🗂️ 최근 리포트</h3>
+      <p style="font-size:13px; color:#475569;">사이드바 하단 목록에서 이전 검색 결과를 클릭하면 즉시 재확인할 수 있습니다. 6시간 캐시 이내에는 API를 재호출하지 않습니다.</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-bottom:8px;">☁️ 저장 방식</h3>
+      <p style="font-size:13px; color:#475569;">기본은 브라우저 로컬 스토리지에 저장됩니다. <code style="font-size:11px; background:#f1f5f9; padding:1px 5px; border-radius:4px;">VITE_SUPABASE_*</code> 설정 시 Supabase 클라우드로 동기화해 여러 기기에서 공유할 수 있습니다.</p>
+    </div>
+  </div>
+
+  <div class="tip tip-green">
+    <span class="tip-icon">✅</span>
+    <div><strong>데모 모드</strong> — 사이드바 하단 "데모 (API 없이 샘플만)" 체크박스를 켜면 실제 API 호출 없이 샘플 데이터로 화면을 미리 볼 수 있습니다.</div>
+  </div>
+  <div class="tip tip-blue">
+    <span class="tip-icon">🖨️</span>
+    <div><strong>인쇄 / PDF 저장</strong> — 우측 상단 프린트 버튼 또는 <code style="background:#dbeafe; padding:1px 6px; border-radius:4px; font-family:monospace; font-size:12px;">Ctrl+P</code>를 누르면 사이드바를 숨기고 리포트만 인쇄 최적화 레이아웃으로 출력됩니다.</div>
+  </div>
+</section>
+
+<footer>
+  <p>공시런 사용자 매뉴얼 · 2026년 5월 기준</p>
+  <p style="margin-top:6px;">
+    서비스: <a href="https://edgar-roan.vercel.app" target="_blank">edgar-roan.vercel.app</a>
+    &nbsp;·&nbsp;
+    데이터: <a href="https://opendart.fss.or.kr" target="_blank">금감원 DART</a> · <a href="https://www.sec.gov/edgar" target="_blank">SEC EDGAR</a>
+  </p>
+  <p style="margin-top:6px; color:#cbd5e1;">스크린샷은 실제 서비스 화면이며, 본 매뉴얼은 투자 조언을 포함하지 않습니다.</p>
+</footer>
+
+<button id="top-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+<script>
+  const btn = document.getElementById('top-btn');
+  window.addEventListener('scroll', () => btn.classList.toggle('show', scrollY > 320));
+</script>
+</body>
+</html>
