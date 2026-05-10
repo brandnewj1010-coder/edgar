@@ -169,13 +169,19 @@ const DART_CORP_NAME_ALIAS: Record<string, string> = {
   "크래프톤": "259960", "krafton": "259960",
 };
 
-/** 쿼리를 정규화해 alias 테이블을 대소문자 무관하게 검색 */
+/** 쿼리를 정규화해 alias 테이블을 검색 */
 function lookupAlias(q: string): string | null {
-  const key = q.trim().toLowerCase().replace(/\s+/g, "");
-  const direct = Object.entries(DART_CORP_NAME_ALIAS).find(
-    ([k]) => k.toLowerCase().replace(/\s+/g, "") === key,
-  );
-  return direct ? direct[1] : null;
+  const trimmed = q.trim().replace(/\s+/g, "");
+  // 직접 키 조회 (한글·이미 소문자 ASCII 처리, toLowerCase 우회)
+  if (DART_CORP_NAME_ALIAS[trimmed] !== undefined) return DART_CORP_NAME_ALIAS[trimmed];
+  // 소문자 변환 후 재시도 (영문 대소문자 처리)
+  const lower = trimmed.toLowerCase();
+  if (DART_CORP_NAME_ALIAS[lower] !== undefined) return DART_CORP_NAME_ALIAS[lower];
+  // 선형 탐색 fallback
+  for (const [k, v] of Object.entries(DART_CORP_NAME_ALIAS)) {
+    if (k.toLowerCase().replace(/\s+/g, "") === lower) return v;
+  }
+  return null;
 }
 
 export async function resolveDartCorp(
