@@ -302,37 +302,55 @@ export default function App() {
                   <p className="mb-3 text-center text-xs font-medium text-indigo-600">불러오는 중…</p>
                 )}
 
-                {/* 기업명 + 배지 */}
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
-                    {result.source === "dart" ? "DART" : "EDGAR"}
-                  </span>
-                  {result.model === "demo" && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">데모</span>
-                  )}
-                  <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-                    {result.query}
-                  </h2>
-                </div>
-
-                {/* 해설노트 이동 유도 */}
-                <div className="mb-4 flex gap-2">
-                  <button
-                    onClick={() => { setPage("notes"); setNotesSeen(true); }}
-                    className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-                  >
-                    <NotebookText className="h-3.5 w-3.5" />
-                    AI 해설노트 보기
-                  </button>
-                  {result.quiz && result.quiz.length > 0 && (
-                    <button
-                      onClick={() => setPage("study")}
-                      className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
-                    >
-                      <BookOpen className="h-3.5 w-3.5" />
-                      퀴즈 {result.quiz.length}문제 풀기
-                    </button>
-                  )}
+                {/* 히어로 카드 */}
+                <div className="mb-6 relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm">
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-500" />
+                  <div className="p-5 md:p-6">
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-indigo-800">
+                        {result.source === "dart" ? "DART" : "EDGAR"}
+                      </span>
+                      {result.model === "demo" && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">데모</span>
+                      )}
+                      {result.model?.includes("캐시") && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">캐시</span>
+                      )}
+                    </div>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900" style={{ fontFamily: '"Noto Serif KR", Georgia, serif' }}>
+                      {result.query}
+                    </h1>
+                    {result.headline && (
+                      <p className="mt-3 text-[15px] font-semibold leading-relaxed gradient-headline" style={{ fontFamily: '"Noto Serif KR", Georgia, serif' }}>
+                        &ldquo;{result.headline}&rdquo;
+                      </p>
+                    )}
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => { setPage("notes"); setNotesSeen(true); }}
+                        className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                      >
+                        <NotebookText className="h-3.5 w-3.5" />
+                        AI 해설노트 보기
+                      </button>
+                      {result.quiz && result.quiz.length > 0 && (
+                        <button
+                          onClick={() => setPage("study")}
+                          className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                        >
+                          <BookOpen className="h-3.5 w-3.5" />
+                          퀴즈 {result.quiz.length}문제 풀기
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="source-chip">데이터 출처 · {result.source === "dart" ? "DART" : "EDGAR"}</span>
+                      {result.model && result.model !== "demo" && (
+                        <span className="source-chip">AI · {result.model}</span>
+                      )}
+                      <span className="rounded-full px-2.5 py-0.5 text-[11px] bg-slate-100 text-slate-500">교육·정보 제공 목적, 투자 권유 아님</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* 차트 */}
@@ -353,19 +371,33 @@ export default function App() {
                   <p className="mb-3 text-center text-xs font-medium text-indigo-600">불러오는 중…</p>
                 )}
 
-                <div className="mb-4 flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
-                    {result.source === "dart" ? "DART" : "EDGAR"}
-                  </span>
-                  {result.model === "demo" && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">데모</span>
-                  )}
-                  {result.model && result.model !== "demo" && (
-                    <span className="font-mono text-xs text-slate-400">{result.model}</span>
-                  )}
-                  <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-                    {result.query}
-                  </h2>
+                {/* 히어로 카드 (해설노트) */}
+                <div className="mb-5 relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm">
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-500" />
+                  <div className="p-5">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-indigo-800">
+                        {result.source === "dart" ? "DART" : "EDGAR"}
+                      </span>
+                      {result.model === "demo" && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">데모</span>
+                      )}
+                      {result.model?.includes("캐시") && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">캐시</span>
+                      )}
+                      {result.model && result.model !== "demo" && (
+                        <span className="font-mono text-[11px] text-slate-400">{result.model}</span>
+                      )}
+                    </div>
+                    <h2 className="text-xl font-bold tracking-tight text-slate-900" style={{ fontFamily: '"Noto Serif KR", Georgia, serif' }}>
+                      {result.query}
+                    </h2>
+                    {result.headline && (
+                      <p className="mt-2 text-[14px] font-semibold leading-relaxed gradient-headline" style={{ fontFamily: '"Noto Serif KR", Georgia, serif' }}>
+                        &ldquo;{result.headline}&rdquo;
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <ReportActions reportMarkdown={result.reportMarkdown} />

@@ -12,6 +12,38 @@ body {
   @apply bg-[#eceff5] text-ink-900 antialiased;
 }
 
+/* ========== KPI / YoY 칩 ========== */
+.yoy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.yoy-up  { background: #dcfce7; color: #166534; }
+.yoy-dn  { background: #fee2e2; color: #991b1b; }
+.yoy-eq  { background: #f1f5f9; color: #475569; }
+
+/* 히어로 카드 — 그라디언트 텍스트 */
+.gradient-headline {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 소스 칩 */
+.source-chip {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
 /* ========== 편집 디자인 리포트 본문 ========== */
 .report-md.report-editorial {
   @apply max-w-none text-[15px] leading-[1.82] text-slate-600;

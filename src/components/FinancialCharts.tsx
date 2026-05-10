@@ -463,6 +463,162 @@ function HrMetricsPanel({ data }: { data: FinancialChartData }) {
   );
 }
 
+// ── KPI 카드 헬퍼 ────────────────────────────────────────────────────────────
+
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  const valid = values.filter((v) => isFinite(v));
+  if (valid.length < 2) return null;
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const range = max - min || 1;
+  const n = values.length;
+  const pts = values
+    .map((v, i) => {
+      const x = (i / (n - 1)) * 100;
+      const y = 30 - ((v - min) / range) * 26;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const fillPts = `0,36 ${pts} 100,36`;
+  return (
+    <svg viewBox="0 0 100 36" preserveAspectRatio="none" className="w-full h-9 mt-2">
+      <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={pts} />
+      <polyline fill={`${color}18`} stroke="none" points={fillPts} />
+    </svg>
+  );
+}
+
+function YoyChip({ pct }: { pct: number | null }) {
+  if (pct === null) return null;
+  const up = pct >= 0;
+  return (
+    <span className={`yoy-chip ${up ? "yoy-up" : "yoy-dn"}`}>
+      {up ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
+    </span>
+  );
+}
+
+function yoyPct(current: number | null, prior: number | null): number | null {
+  if (current === null || prior === null || prior === 0) return null;
+  return ((current - prior) / Math.abs(prior)) * 100;
+}
+
+function KpiCard({
+  label,
+  value,
+  yoy,
+  priorYear,
+  sparkValues,
+  sparkColor,
+}: {
+  label: string;
+  value: string;
+  yoy: number | null;
+  priorYear: string;
+  sparkValues: number[];
+  sparkColor: string;
+}) {
+  return (
+    <div className="kpi-card rounded-2xl border border-slate-200/80 bg-white p-5 transition-all hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(15,23,42,0.06),_0_24px_40px_-20px_rgba(99,102,241,0.18)] hover:border-indigo-200">
+      <p className="text-[11px] text-slate-500">{label}</p>
+      <p className="mt-1.5 text-[22px] font-bold tabular-nums text-slate-900">{value}</p>
+      <div className="mt-1 flex items-center gap-2 text-[11px]">
+        <YoyChip pct={yoy} />
+        <span className="text-slate-400">YoY · {priorYear}</span>
+      </div>
+      <Sparkline values={sparkValues} color={sparkColor} />
+    </div>
+  );
+}
+
+function KpiSummaryCards({ data }: { data: FinancialChartData }) {
+  const rev = data.metrics.find((m) => ["매출액", "Revenue"].includes(m.label));
+  const op  = data.metrics.find((m) => ["영업이익", "Operating Income"].includes(m.label));
+  const ni  = data.metrics.find((m) => ["당기순이익", "Net Income"].includes(m.label));
+  if (!rev && !op) return null;
+
+  const unit = rev?.unit ?? op?.unit ?? "백만원";
+
+  const opMarginCurrent =
+    rev?.current && op?.current ? (op.current / Math.abs(rev.current)) * 100 : null;
+  const opMarginPrior =
+    rev?.prior && op?.prior ? (op.prior / Math.abs(rev.prior)) * 100 : null;
+  const opMarginPP =
+    rev?.priorPrior && op?.priorPrior ? (op.priorPrior / Math.abs(rev.priorPrior)) * 100 : null;
+
+  const sparkNorm = (vals: (number | null)[]) =>
+    vals.map((v) => (v === null ? 0 : normalizeToBaegmanwon(v)));
+
+  const cards: Array<{
+    label: string;
+    value: string;
+    yoy: number | null;
+    sparkValues: number[];
+    sparkColor: string;
+  }> = [];
+
+  if (rev) {
+    cards.push({
+      label: unit === "USD" ? "Revenue" : "매출액",
+      value: fmtVal(rev.current, unit),
+      yoy: yoyPct(rev.current, rev.prior),
+      sparkValues: sparkNorm([rev.priorPrior, rev.prior, rev.current]),
+      sparkColor: "#16a34a",
+    });
+  }
+  if (op) {
+    cards.push({
+      label: unit === "USD" ? "Operating Income" : "영업이익",
+      value: fmtVal(op.current, unit),
+      yoy: yoyPct(op.current, op.prior),
+      sparkValues: sparkNorm([op.priorPrior, op.prior, op.current]),
+      sparkColor: "#6366f1",
+    });
+  }
+  if (opMarginCurrent !== null) {
+    cards.push({
+      label: unit === "USD" ? "Op. Margin" : "영업이익률",
+      value: `${opMarginCurrent.toFixed(1)}%`,
+      yoy: opMarginPrior !== null ? opMarginCurrent - opMarginPrior : null,
+      sparkValues: [opMarginPP ?? 0, opMarginPrior ?? 0, opMarginCurrent],
+      sparkColor: "#7c3aed",
+    });
+  }
+  if (ni) {
+    cards.push({
+      label: unit === "USD" ? "Net Income" : "당기순이익",
+      value: fmtVal(ni.current, unit),
+      yoy: yoyPct(ni.current, ni.prior),
+      sparkValues: sparkNorm([ni.priorPrior, ni.prior, ni.current]),
+      sparkColor: "#0ea5e9",
+    });
+  }
+
+  if (cards.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      <div className="mb-3 flex items-center gap-2">
+        <h2 className="text-[13px] font-semibold text-slate-700">핵심 지표 — 한눈에</h2>
+        <span className="text-[11px] text-slate-400">YoY 비교 · {data.priorPriorYear}~{data.currentYear}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {cards.map((c) => (
+          <KpiCard
+            key={c.label}
+            label={c.label}
+            value={c.value}
+            yoy={c.yoy}
+            priorYear={data.priorYear}
+            sparkValues={c.sparkValues}
+            sparkColor={c.sparkColor}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 export function FinancialCharts({ chartData }: Props) {
   if (!chartData || chartData.metrics.length === 0) return null;
@@ -481,6 +637,9 @@ export function FinancialCharts({ chartData }: Props) {
           {chartData.currentYear}년 기준
         </span>
       </div>
+
+      {/* KPI 요약 카드 */}
+      <KpiSummaryCards data={chartData} />
 
       {/* 손익 + 이익률 */}
       <div className="grid gap-6 lg:grid-cols-2">
