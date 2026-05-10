@@ -453,13 +453,13 @@ function formatAmountKorean(s: string | undefined): string {
   const sign = raw < 0 ? "−" : "";
   let v = Math.abs(raw);
 
-  // 원 단위 자동 감지: 10^10(= 100억 백만원=100조) 초과면 원→백만원 변환
-  if (v > 10_000_000_000) {
+  // 원 단위 자동 감지: 10^9(=10억) 초과면 원→백만원 변환
+  if (v > 1_000_000_000) {
     v = v / 1_000_000;
   }
 
   if (v >= 1_000_000) return `${sign}${(v / 1_000_000).toFixed(1)}조`;
-  if (v >= 10_000)    return `${sign}${Math.round(v / 10_000).toLocaleString()}억`;
+  if (v >= 100)       return `${sign}${Math.round(v / 100).toLocaleString()}억`;
   if (v >= 1)         return `${sign}${Math.round(v).toLocaleString()}백만`;
   return str;
 }
