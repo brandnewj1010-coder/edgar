@@ -279,7 +279,7 @@ export default function App() {
                   넣은 뒤 검색하세요.
                 </p>
                 <p className="mt-3 text-xs text-slate-400">
-                  EDGAR 예: AAPL, MSFT, TSLA | DART 예: 삼성전자, 005930
+                  EDGAR: 티커만 가능 (AAPL, MSFT, TSLA) | DART: 삼성전자, 005930
                 </p>
               </div>
             )}

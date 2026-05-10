@@ -251,7 +251,7 @@ ${snippet}
 
 function buildInsightCardsPrompt(reportMarkdown: string, company: string): string {
   const snippet = reportMarkdown.slice(0, 3000);
-  return `다음 재무 공시 해설을 바탕으로 HR 실무자를 위한 **구조화된 인사이트 카드**를 JSON으로 생성하세요.
+  return `다음 재무 공시 해설을 바탕으로 **구조화된 인사이트 카드**를 JSON으로 생성하세요.
 
 리포트 (일부):
 ---
@@ -276,10 +276,10 @@ ${snippet}
 
 조건:
 - 기업: ${company}
-- watchOuts 2~3개, severity는 high/mid/low 중 하나
-- anomalies 1~2개, direction은 up/down/flat 중 하나
-- scenarios 1~2개 (HR·비용 관련 시나리오 우선)
-- strengths 2~3개 (공시에서 확인되는 객관적 강점)
+- watchOuts 2~3개: 순수 재무 위험 요소만 (매출 성장률, 수익성, 레버리지, 현금흐름 등) — 인건비·HR 내용 제외
+- anomalies 1~2개: 전년 대비 이상 급변한 재무 지표, direction은 up/down/flat 중 하나
+- scenarios 1~2개: 거시 환경 변화(환율·금리·원자재 등)나 사업 리스크가 실적에 미치는 영향
+- strengths 2~3개: 공시 수치로 확인되는 객관적 재무 강점
 - 모든 항목은 공시 수치 기반, 추측 금지`;
 }
 

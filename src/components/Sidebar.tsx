@@ -120,7 +120,7 @@ export function Sidebar({
           <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
             {source === "dart"
               ? "한글 회사명(삼성전자·에스케이하이닉스), 영문(NAVER), 종목코드(005930) 모두 입력 가능합니다."
-              : "티커(AAPL)나 회사명(Apple) 모두 입력 가능합니다."}
+              : "티커(AAPL, DIS, NVDA)로 검색하세요. 회사명 검색은 지원하지 않습니다."}
           </p>
 
           {/* 퀵픽 */}
