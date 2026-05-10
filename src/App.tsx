@@ -18,6 +18,7 @@ import { ReportDocument } from "./components/ReportDocument";
 import { ReportActions } from "./components/ReportActions";
 import { ComparisonCharts } from "./components/ComparisonCharts";
 import { InsightCards } from "./components/InsightCards";
+import { SankeyFlow } from "./components/SankeyFlow";
 
 type PageView = "report" | "notes" | "study";
 
@@ -365,6 +366,11 @@ export default function App() {
                   <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 px-6 py-12 text-center text-sm text-slate-400">
                     구조화된 재무 데이터가 없습니다. 해설노트에서 AI 분석을 확인하세요.
                   </div>
+                )}
+
+                {/* 손익 흐름도 + 파이차트 */}
+                {result.chartData && (
+                  <SankeyFlow data={result.chartData} />
                 )}
 
                 {/* 비교 차트 */}
