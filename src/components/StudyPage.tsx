@@ -386,8 +386,8 @@ function StudyStats({ sessions }: { sessions: QuizSession[] }) {
         { label: "평균 점수", value: `${avgScore}점` },
         { label: "누적 정답률", value: `${Math.round((totalCorrect / totalQ) * 100)}%` },
       ].map((stat) => (
-        <div key={stat.label} className="rounded-xl bg-indigo-50 px-4 py-3 text-center">
-          <p className="text-xl font-bold text-indigo-700">{stat.value}</p>
+        <div key={stat.label} className="rounded-xl border border-amber-200/70 bg-white/70 px-4 py-3 text-center">
+          <p className="text-xl font-bold text-amber-700">{stat.value}</p>
           <p className="mt-0.5 text-xs text-slate-500">{stat.label}</p>
         </div>
       ))}
@@ -454,7 +454,7 @@ export function StudyPage({ pendingQuiz, onClearPending }: StudyPageProps) {
 
   if (activeSession) {
     return (
-      <div className="min-h-full px-4 py-6 md:px-8 md:py-8">
+      <div className="min-h-full bg-[#fdfaf3] px-4 py-6 md:px-8 md:py-8">
         <QuizPlayer
           session={activeSession}
           onComplete={handleComplete}
@@ -465,10 +465,13 @@ export function StudyPage({ pendingQuiz, onClearPending }: StudyPageProps) {
   }
 
   return (
-    <div className="min-h-full px-4 py-6 md:px-8 md:py-8">
+    <div className="min-h-full bg-[#fdfaf3] px-4 py-6 md:px-8 md:py-8">
       <div className="mx-auto max-w-3xl">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold text-slate-900">스터디 아카이브</h2>
+          <div className="flex items-center gap-2 mb-1">
+            <BookOpen className="h-5 w-5 text-amber-600" />
+            <h2 className="text-xl font-semibold text-slate-900">스터디 아카이브</h2>
+          </div>
           <p className="mt-1 text-sm text-slate-500">
             조회한 기업의 퀴즈를 풀고 학습 기록을 쌓아 보세요
           </p>
