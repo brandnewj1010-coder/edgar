@@ -20,7 +20,15 @@ import type { QuizItem, ReflectionItem, FinancialChartData, InsightCards } from 
 export const config = { maxDuration: 60 };
 
 type Source = "dart" | "edgar";
-type Body = { source?: string; query?: string; compareWith?: string };
+type Body = {
+  source?: string;
+  query?: string;
+  compareWith?: string;
+  /** dart-search 엔드포인트가 미리 조회한 corp 정보 — 있으면 XML 다운로드 생략 */
+  resolvedCorpCode?: string;
+  resolvedCorpName?: string;
+  resolvedStockCode?: string;
+};
 
 const MIN_REPORT_CHARS = 180;
 
@@ -382,6 +390,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const source = body.source === "edgar" ? "edgar" : "dart";
     const query = String(body.query ?? "").trim();
     const compareWith = String(body.compareWith ?? "").trim() || null;
+    const preResolvedCorp = body.resolvedCorpCode
+      ? { corp_code: body.resolvedCorpCode, corp_name: body.resolvedCorpName ?? query, stock_code: body.resolvedStockCode ?? "" }
+      : null;
     if (!query) {
       res.status(400).json({ error: "검색어(기업명·종목코드 또는 티커)를 입력하세요." });
       return;
@@ -404,7 +415,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const dartKey = process.env.DART_API_KEY?.trim();
       if (dartKey) {
         try {
-          const corp = await resolveDartCorp(query, dartKey);
+          const corp = preResolvedCorp ?? await resolveDartCorp(query, dartKey);
           if (!corp) {
             res.status(400).json({
               error: "상장사를 찾지 못했습니다. **6자리 종목코드**(예: 005930)로 다시 검색해 보세요.",
