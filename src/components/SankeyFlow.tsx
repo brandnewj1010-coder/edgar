@@ -89,7 +89,8 @@ function buildSankeyNodes(data: FinancialChartData): SankeyNode[] | null {
     nodes.push({ id: "tax", label: "세금·기타", value: TAX, x: curX, y: txY, w: COL_W, h: taxH, color: "#cbd5e1" });
   }
 
-  return nodes.map((n) => ({ ...n, _svgW: SVG_W })) as SankeyNode[];
+  void unit; // suppress unused warning
+  return nodes;
 }
 
 function SankeyBar({ node, unit }: { node: SankeyNode; unit: string }) {
@@ -122,9 +123,6 @@ function SankeyDiagram({ data }: { data: FinancialChartData }) {
   const ni   = nodes.find((n) => n.id === "ni");
   const tax  = nodes.find((n) => n.id === "tax");
 
-  // bezier ribbon between two vertical bars
-  // (x1,y1,h1) = source right-edge top + height
-  // (x2,y2,h2) = dest   left-edge top + height
   function ribbon(x1: number, y1: number, h1: number, x2: number, y2: number, h2: number, color: string, opacity = 0.18) {
     const mx = (x1 + x2) / 2;
     return (
@@ -139,13 +137,9 @@ function SankeyDiagram({ data }: { data: FinancialChartData }) {
 
   return (
     <svg viewBox={`0 0 ${maxX} ${maxY}`} className="w-full" style={{ maxHeight: 280 }}>
-      {/* Revenue → OpIncome: top portion of revenue's right edge */}
       {rev && op  && ribbon(rev.x + rev.w, op.y,  op.h,  op.x,  op.y,  op.h,  "#10b981", 0.16)}
-      {/* Revenue → OpCost: bottom portion of revenue's right edge (starts right after op.h) */}
       {rev && oc  && ribbon(rev.x + rev.w, oc.y,  oc.h,  oc.x,  oc.y,  oc.h,  "#94a3b8", 0.13)}
-      {/* OpIncome → NetIncome */}
       {op  && ni  && ribbon(op.x  + op.w,  ni.y,  ni.h,  ni.x,  ni.y,  ni.h,  "#0ea5e9", 0.16)}
-      {/* OpIncome → Tax */}
       {op  && tax && ribbon(op.x  + op.w,  tax.y, tax.h, tax.x, tax.y, tax.h, "#cbd5e1", 0.13)}
       {nodes.map((n) => <SankeyBar key={n.id} node={n} unit={unit} />)}
     </svg>
@@ -207,7 +201,7 @@ function CategoryPie({ data }: { data: FinancialChartData }) {
       <ResponsiveContainer width="100%" height={200}>
         <PieChart>
           <Pie data={segments} cx="50%" cy="50%" outerRadius={72} innerRadius={36} dataKey="value"
-            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+            label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
             labelLine={false} fontSize={11}>
             {segments.map((_, i) => (
               <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />

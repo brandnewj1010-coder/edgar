@@ -140,10 +140,6 @@ export type AnalyzeResponse = {
   query: string;
   /** 구조화된 차트 데이터 (DART/EDGAR에서 추출) */
   chartData?: FinancialChartData | null;
-  /** 기업 간 비교 시 상대 기업 */
-  compareWith?: string;
-  /** 비교 기업 재무 데이터 */
-  compareChartData?: FinancialChartData | null;
   /** AI 구조화 인사이트 카드 */
   insightCards?: InsightCards | null;
   /** 선택된 회계 연도 비교 (예: 2023, 2024, 2025) */

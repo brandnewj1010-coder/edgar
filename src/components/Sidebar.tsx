@@ -9,6 +9,7 @@ export function Sidebar({
   query,
   onQuery,
   onSubmit,
+  onQuickSearch,
   loading,
   recent,
   onPickRecent,
@@ -21,6 +22,7 @@ export function Sidebar({
   query: string;
   onQuery: (q: string) => void;
   onSubmit: () => void;
+  onQuickSearch: (q: string) => void;
   loading: boolean;
   recent: RecentItem[];
   onPickRecent: (r: RecentItem) => void;
@@ -121,6 +123,28 @@ export function Sidebar({
               ? "한글 회사명(삼성전자·에스케이하이닉스), 영문(NAVER), 종목코드(005930) 모두 입력 가능합니다."
               : "티커(AAPL)나 회사명(Apple) 모두 입력 가능합니다."}
           </p>
+
+          {/* 퀵픽 */}
+          <div className="mt-2">
+            <p className="mb-1.5 text-[10px] font-medium text-slate-400">자주 찾는 기업</p>
+            <div className="flex flex-wrap gap-1.5">
+              {source === "dart"
+                ? ["삼성전자","SK하이닉스","NAVER","현대자동차","LG전자","카카오","셀트리온","포스코"].map((c) => (
+                    <button key={c} type="button"
+                      onClick={() => onQuickSearch(c)}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
+                      {c}
+                    </button>
+                  ))
+                : ["AAPL","MSFT","NVDA","TSLA","GOOGL","META","AMZN","NFLX"].map((c) => (
+                    <button key={c} type="button"
+                      onClick={() => onQuickSearch(c)}
+                      className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-mono font-medium text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
+                      {c}
+                    </button>
+                  ))}
+            </div>
+          </div>
         </div>
 
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
